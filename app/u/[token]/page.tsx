@@ -16,8 +16,10 @@ import { eq, and, asc } from 'drizzle-orm';
 import { getWeekStart, isBeforeCutoff, formatDateISO, formatDateCZ, getBakingDate } from '@/lib/week/utils';
 import OrderForm from '@/components/customer/OrderForm';
 import type { Product, ExistingOrder } from '@/components/customer/OrderForm';
+import SkipWeekButton from '@/components/customer/SkipWeekButton';
 
-export default async function CustomerPage() {
+export default async function CustomerPage({ params }: { params: { token: string } }) {
+  const { token } = params;
   const headersList = headers();
   const userId = headersList.get('x-user-id');
 
@@ -102,7 +104,25 @@ export default async function CustomerPage() {
           isEditable={editable}
           deadlineInfo={deadlineInfo}
           userName={user.name}
+          customerToken={token}
         />
+        {/* Next week skip control */}
+        {(() => {
+          const nextWeek = new Date(weekStart);
+          nextWeek.setDate(nextWeek.getDate() + 7);
+          const nextWeekISO = formatDateISO(nextWeek);
+          const nextWeekLabel = nextWeek.toLocaleDateString('cs-CZ', {
+            day: 'numeric', month: 'long', year: 'numeric',
+          });
+          return (
+            <SkipWeekButton
+              nextWeekStart={nextWeekISO}
+              nextWeekLabel={nextWeekLabel}
+              currentSkipUntil={user.skipUntil ?? null}
+              customerToken={token}
+            />
+          );
+        })()}
       </div>
     </main>
   );

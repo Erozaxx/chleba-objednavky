@@ -37,6 +37,7 @@ interface OrderFormProps {
   isEditable: boolean;
   deadlineInfo: string;
   userName: string;
+  customerToken: string;
 }
 
 interface OrderState {
@@ -56,6 +57,7 @@ export default function OrderForm({
   isEditable,
   deadlineInfo,
   userName,
+  customerToken,
 }: OrderFormProps) {
   // Initialize order state from existing orders
   const buildInitialState = (): Record<string, OrderState> => {
@@ -123,7 +125,10 @@ export default function OrderForm({
     try {
       const response = await fetch('/api/customer/orders', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-customer-token': customerToken,
+        },
         body: JSON.stringify({ orders: orderItems }),
       });
 
