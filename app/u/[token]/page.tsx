@@ -17,7 +17,8 @@ import { getWeekStart, isBeforeCutoff, formatDateISO, formatDateCZ, getBakingDat
 import OrderForm from '@/components/customer/OrderForm';
 import type { Product, ExistingOrder } from '@/components/customer/OrderForm';
 
-export default async function CustomerPage() {
+export default async function CustomerPage({ params }: { params: { token: string } }) {
+  const { token } = params;
   const headersList = headers();
   const userId = headersList.get('x-user-id');
 
@@ -102,6 +103,7 @@ export default async function CustomerPage() {
           isEditable={editable}
           deadlineInfo={deadlineInfo}
           userName={user.name}
+          customerToken={token}
         />
       </div>
     </main>

@@ -144,17 +144,38 @@ function handleCronAuth(request: NextRequest): NextResponse {
   return NextResponse.next();
 }
 
-function handleCustomerApi(request: NextRequest): NextResponse {
-  const userId = request.headers.get('x-user-id');
+async function handleCustomerApi(request: NextRequest): Promise<NextResponse> {
+  const token = request.headers.get('x-customer-token');
 
-  if (!userId) {
+  if (!token) {
     return new NextResponse(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,
       headers: { 'Content-Type': 'application/json' },
     });
   }
 
-  return NextResponse.next();
+  try {
+    const sql = neon(process.env.DATABASE_URL!);
+    const rows = await sql`SELECT id FROM users WHERE token = ${token} AND active = true LIMIT 1`;
+
+    if (rows.length === 0) {
+      return new NextResponse(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    const headers = new Headers(request.headers);
+    headers.set('x-user-id', rows[0].id as string);
+
+    return NextResponse.next({ request: { headers } });
+  } catch (error) {
+    console.error('[middleware] Customer API auth failed:', error instanceof Error ? error.message : 'unknown error');
+    return new NextResponse(JSON.stringify({ error: 'Server error' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
 }
 
 export const config = {
