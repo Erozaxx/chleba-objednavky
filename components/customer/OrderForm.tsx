@@ -3,14 +3,17 @@
 /**
  * components/customer/OrderForm.tsx
  *
- * Client Component: formulář objednávek.
+ * Client Component: formulář objednávek s debounced autosave.
+ * Challenger návrh: nahradit manuální "Uložit" tlačítko automatickým
+ * ukládáním – 800ms po poslední změně se objednávka uloží automaticky.
+ *
  * Mobile-first UI, hnědozlaté barvy (Tailwind bread-* třídy).
  * Pro každý produkt: název + +/- tlačítka pro quantity.
  * Toggle "dočasná změna" (jen tento týden) nebo trvalá.
- * Submit → POST /api/customer/orders.
+ * Autosave → POST /api/customer/orders.
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import QtyControl from './QtyControl';
 
 // ---------------------------------------------------------------------------
@@ -46,6 +49,10 @@ interface OrderState {
   originalQuantity: number | null;
 }
 
+type SaveStatus = 'idle' | 'pending' | 'saving' | 'saved' | 'error';
+
+const AUTOSAVE_DELAY_MS = 800;
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -74,10 +81,72 @@ export default function OrderForm({
   };
 
   const [orderState, setOrderState] = useState<Record<string, OrderState>>(buildInitialState);
-  const [submitting, setSubmitting] = useState(false);
-  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(
-    null,
-  );
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isFirstRender = useRef(true);
+
+  // Autosave on orderState change (skip initial mount)
+  useEffect(() => {
+    if (!isEditable) return;
+
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+
+    setSaveStatus('pending');
+    setSaveError(null);
+
+    if (debounceTimer.current) {
+      clearTimeout(debounceTimer.current);
+    }
+
+    debounceTimer.current = setTimeout(async () => {
+      setSaveStatus('saving');
+
+      const orderItems = products.map((product) => {
+        const state = orderState[product.id];
+        return {
+          productId: product.id,
+          weekStart,
+          quantity: state.quantity,
+          isTemporary: state.isTemporary,
+          originalQuantity: state.isTemporary ? state.originalQuantity : null,
+        };
+      });
+
+      try {
+        const response = await fetch('/api/customer/orders', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-customer-token': customerToken,
+          },
+          body: JSON.stringify({ orders: orderItems }),
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+          setSaveStatus('saved');
+          // Reset to idle after 3 seconds
+          setTimeout(() => setSaveStatus('idle'), 3000);
+        } else {
+          setSaveError(data.error || 'Nepodařilo se uložit objednávku.');
+          setSaveStatus('error');
+        }
+      } catch {
+        setSaveError('Chyba spojení se serverem.');
+        setSaveStatus('error');
+      }
+    }, AUTOSAVE_DELAY_MS);
+
+    return () => {
+      if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderState]);
 
   const handleQuantityChange = useCallback((productId: string, newQty: number) => {
     setOrderState((prev) => ({
@@ -87,7 +156,6 @@ export default function OrderForm({
         quantity: newQty,
       },
     }));
-    setFeedback(null);
   }, []);
 
   const handleTemporaryToggle = useCallback((productId: string) => {
@@ -104,56 +172,17 @@ export default function OrderForm({
         },
       };
     });
-    setFeedback(null);
   }, []);
 
-  const handleSubmit = async () => {
-    setSubmitting(true);
-    setFeedback(null);
-
-    const orderItems = products.map((product) => {
-      const state = orderState[product.id];
-      return {
-        productId: product.id,
-        weekStart,
-        quantity: state.quantity,
-        isTemporary: state.isTemporary,
-        originalQuantity: state.isTemporary ? state.originalQuantity : null,
-      };
-    });
-
-    try {
-      const response = await fetch('/api/customer/orders', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-customer-token': customerToken,
-        },
-        body: JSON.stringify({ orders: orderItems }),
-      });
-
-      const data = await response.json();
-
-      if (response.ok && data.success) {
-        setFeedback({
-          type: 'success',
-          message: `Objednávka uložena (${data.saved} položek).`,
-        });
-      } else {
-        setFeedback({
-          type: 'error',
-          message: data.error || 'Nepodařilo se uložit objednávku.',
-        });
-      }
-    } catch {
-      setFeedback({
-        type: 'error',
-        message: 'Chyba spojení se serverem.',
-      });
-    } finally {
-      setSubmitting(false);
-    }
+  const statusConfig: Record<SaveStatus, { text: string; className: string } | null> = {
+    idle: null,
+    pending: { text: 'Čekám na změny...', className: 'text-bread-500' },
+    saving: { text: 'Ukládám...', className: 'text-bread-600 animate-pulse' },
+    saved: { text: '✓ Uloženo', className: 'text-green-600' },
+    error: { text: saveError ?? 'Chyba při ukládání.', className: 'text-red-600' },
   };
+
+  const statusInfo = statusConfig[saveStatus];
 
   return (
     <div className="space-y-6">
@@ -228,28 +257,14 @@ export default function OrderForm({
         })}
       </div>
 
-      {/* Submit button */}
+      {/* Autosave status – replaces submit button */}
       {isEditable && (
-        <button
-          type="button"
-          onClick={handleSubmit}
-          disabled={submitting}
-          className="btn-primary w-full py-3 text-base disabled:opacity-50 disabled:cursor-wait"
-        >
-          {submitting ? 'Ukládám...' : 'Uložit objednávku'}
-        </button>
-      )}
-
-      {/* Feedback */}
-      {feedback && (
-        <div
-          className={`text-center text-sm px-4 py-3 rounded-lg ${
-            feedback.type === 'success'
-              ? 'bg-green-50 text-green-700 border border-green-200'
-              : 'bg-red-50 text-red-700 border border-red-200'
-          }`}
-        >
-          {feedback.message}
+        <div className="text-center text-sm min-h-[1.5rem]">
+          {statusInfo ? (
+            <span className={statusInfo.className}>{statusInfo.text}</span>
+          ) : (
+            <span className="text-bread-300 text-xs">Změny se ukládají automaticky</span>
+          )}
         </div>
       )}
     </div>
