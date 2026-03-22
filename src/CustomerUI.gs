@@ -63,8 +63,7 @@ function renderCustomerPage(userId) {
   var html = _buildCustomerHtml(userId, userName, weeksData);
 
   return HtmlService.createHtmlOutput(html)
-    .setTitle("Objednávky chleba – " + user.name)
-    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.DENY);
+    .setTitle("Objednávky chleba – " + user.name);
 }
 
 /**
@@ -250,49 +249,64 @@ function _buildWeekCard(week) {
   lines.push('  </div>');
 
   if (!week.canEdit) {
-    // Read-only souhrn existujících objednávek pro tento týden
+    // Read-only souhrn existujících objednávek pro tento týden – zobrazit všechny produkty jako disabled
     lines.push('  <div class="week-card__readonly-notice">');
     lines.push('    Objednávky na tento týden již nelze měnit.');
     lines.push('  </div>');
+    lines.push('  <div class="week-card__products">');
     for (var p = 0; p < week.products.length; p++) {
       var prod = week.products[p];
-      if (prod.quantity > 0) {
-        lines.push('  <div class="product-row product-row--readonly">');
-        lines.push('    <span class="product-name">' + prod.name + '</span>');
-        if (prod.description) {
-          lines.push('    <span class="product-desc">' + prod.description + '</span>');
-        }
-        lines.push('    <span class="product-qty-static">' + prod.quantity + '&times;</span>');
-        lines.push('  </div>');
+      var inputId = "qty_" + prod.productId + "_" + week.weekStart;
+      lines.push('  <div class="product-row product-row--readonly">');
+      lines.push('    <div class="product-label">');
+      lines.push('      <span class="product-name">' + prod.name + '</span>');
+      if (prod.description) {
+        lines.push('      <span class="product-desc">' + prod.description + '</span>');
       }
+      lines.push('    </div>');
+      lines.push('    <div class="qty-controls qty-controls--disabled">');
+      lines.push('      <button type="button" class="qty-btn qty-btn--minus" disabled aria-label="Méně">−</button>');
+      lines.push('      <input');
+      lines.push('        class="qty-input"');
+      lines.push('        type="number"');
+      lines.push('        id="' + inputId + '"');
+      lines.push('        value="' + prod.quantity + '"');
+      lines.push('        disabled');
+      lines.push('        inputmode="numeric"');
+      lines.push('      >');
+      lines.push('      <button type="button" class="qty-btn qty-btn--plus" disabled aria-label="Více">+</button>');
+      lines.push('    </div>');
+      lines.push('  </div>');
     }
-    if (_allZero(week.products)) {
-      lines.push('  <p class="no-orders-note">Žádná objednávka.</p>');
-    }
+    lines.push('  </div>');
   } else {
     lines.push('  <div class="week-card__products">');
     for (var q = 0; q < week.products.length; q++) {
       var prod2 = week.products[q];
       var inputId = "qty_" + prod2.productId + "_" + week.weekStart;
       lines.push('    <div class="product-row">');
-      lines.push('      <label class="product-label" for="' + inputId + '">');
+      lines.push('      <label class="product-label">');
       lines.push('        <span class="product-name">' + prod2.name + '</span>');
       if (prod2.description) {
         lines.push('        <span class="product-desc">' + prod2.description + '</span>');
       }
       lines.push('      </label>');
-      lines.push('      <input');
-      lines.push('        class="qty-input"');
-      lines.push('        type="number"');
-      lines.push('        id="' + inputId + '"');
-      lines.push('        name="' + inputId + '"');
-      lines.push('        data-product-id="' + prod2.productId + '"');
-      lines.push('        data-week-start="' + week.weekStart + '"');
-      lines.push('        min="0"');
-      lines.push('        step="1"');
-      lines.push('        value="' + prod2.quantity + '"');
-      lines.push('        inputmode="numeric"');
-      lines.push('      >');
+      lines.push('      <div class="qty-controls">');
+      lines.push('        <button type="button" class="qty-btn qty-btn--minus" data-target="' + inputId + '" aria-label="Méně">−</button>');
+      lines.push('        <input');
+      lines.push('          class="qty-input"');
+      lines.push('          type="number"');
+      lines.push('          id="' + inputId + '"');
+      lines.push('          name="' + inputId + '"');
+      lines.push('          data-product-id="' + prod2.productId + '"');
+      lines.push('          data-week-start="' + week.weekStart + '"');
+      lines.push('          min="0"');
+      lines.push('          step="1"');
+      lines.push('          value="' + prod2.quantity + '"');
+      lines.push('          inputmode="numeric"');
+      lines.push('        >');
+      lines.push('        <button type="button" class="qty-btn qty-btn--plus" data-target="' + inputId + '" aria-label="Více">+</button>');
+      lines.push('      </div>');
       lines.push('    </div>');
     }
     lines.push('  </div>');
@@ -323,14 +337,14 @@ function _getCustomerCss() {
     "html { font-size: 16px; }",
     "body {",
     "  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;",
-    "  background: #f5f5f5;",
+    "  background: #faf6ef;",
     "  color: #222;",
     "  min-height: 100vh;",
     "}",
     "",
     "/* ── Layout ──────────────────────────────────────────────────────── */",
     ".page-header {",
-    "  background: #2e7d32;",
+    "  background: #6d4c1f;",
     "  color: #fff;",
     "  padding: 1.25rem 1rem 1rem;",
     "  text-align: center;",
@@ -346,9 +360,9 @@ function _getCustomerCss() {
     "  letter-spacing: 0.01em;",
     "}",
     ".main-content {",
-    "  max-width: 600px;",
+    "  max-width: 680px;",
     "  margin: 0 auto;",
-    "  padding: 1rem;",
+    "  padding: 0.5rem;",
     "}",
     "",
     "/* ── Status / souhrn ─────────────────────────────────────────────── */",
@@ -364,13 +378,13 @@ function _getCustomerCss() {
     "  border: 1px solid #ef9a9a;",
     "}",
     ".status-bar--loading {",
-    "  background: #e8f5e9;",
-    "  color: #2e7d32;",
-    "  border: 1px solid #a5d6a7;",
+    "  background: #fdf3e3;",
+    "  color: #6d4c1f;",
+    "  border: 1px solid #d4a96a;",
     "}",
     ".summary-box {",
-    "  background: #e8f5e9;",
-    "  border: 1px solid #a5d6a7;",
+    "  background: #fdf3e3;",
+    "  border: 1px solid #d4a96a;",
     "  border-radius: 8px;",
     "  padding: 1rem;",
     "  margin-bottom: 1rem;",
@@ -378,7 +392,7 @@ function _getCustomerCss() {
     ".summary-box__title {",
     "  font-weight: 600;",
     "  margin-bottom: 0.5rem;",
-    "  color: #1b5e20;",
+    "  color: #4a2f0d;",
     "}",
     ".summary-box__list {",
     "  list-style: none;",
@@ -401,7 +415,7 @@ function _getCustomerCss() {
     "  overflow: hidden;",
     "}",
     ".week-card__header {",
-    "  background: #2e7d32;",
+    "  background: #6d4c1f;",
     "  color: #fff;",
     "  padding: 0.65rem 1rem;",
     "  display: flex;",
@@ -425,7 +439,7 @@ function _getCustomerCss() {
     "  white-space: nowrap;",
     "}",
     ".week-card__products {",
-    "  padding: 0.75rem 1rem;",
+    "  padding: 0.5rem 0.75rem;",
     "}",
     ".week-card__readonly-notice {",
     "  padding: 0.5rem 1rem 0;",
@@ -438,9 +452,9 @@ function _getCustomerCss() {
     "  display: flex;",
     "  align-items: center;",
     "  justify-content: space-between;",
-    "  padding: 0.55rem 0;",
+    "  padding: 0.4rem 0;",
     "  border-bottom: 1px solid #f0f0f0;",
-    "  gap: 0.5rem;",
+    "  gap: 0.25rem;",
     "}",
     ".product-row:last-child { border-bottom: none; }",
     ".product-row--readonly {",
@@ -450,42 +464,87 @@ function _getCustomerCss() {
     "  flex: 1;",
     "  cursor: pointer;",
     "  min-width: 0;",
+    "  touch-action: manipulation;",
+    "  -webkit-user-select: none;",
+    "  user-select: none;",
     "}",
     ".product-name {",
     "  display: block;",
     "  font-weight: 500;",
-    "  font-size: 1rem;",
+    "  font-size: 0.9rem;",
     "}",
     ".product-desc {",
     "  display: block;",
-    "  font-size: 0.8rem;",
+    "  font-size: 0.75rem;",
     "  color: #757575;",
     "  margin-top: 0.1rem;",
     "  white-space: nowrap;",
     "  overflow: hidden;",
     "  text-overflow: ellipsis;",
     "}",
+    "/* ── +/- controls ────────────────────────────────────────────── */",
+    ".qty-controls {",
+    "  display: flex;",
+    "  align-items: center;",
+    "  gap: 0.25rem;",
+    "  flex-shrink: 0;",
+    "}",
+    ".qty-btn {",
+    "  width: 44px;",
+    "  height: 44px;",
+    "  border-radius: 50%;",
+    "  border: none;",
+    "  background: #6d4c1f;",
+    "  color: #fff;",
+    "  font-size: 1.4rem;",
+    "  line-height: 1;",
+    "  touch-action: manipulation;",
+    "  cursor: pointer;",
+    "  display: flex;",
+    "  align-items: center;",
+    "  justify-content: center;",
+    "  flex-shrink: 0;",
+    "  touch-action: manipulation;",
+    "  user-select: none;",
+    "  transition: background 0.12s;",
+    "}",
+    ".qty-btn:hover { background: #4a2f0d; }",
+    ".qty-btn:active { background: #3a2008; }",
+    ".qty-btn:disabled {",
+    "  background: #bdbdbd;",
+    "  cursor: not-allowed;",
+    "}",
     ".qty-input {",
-    "  width: 70px;",
-    "  padding: 0.45rem 0.5rem;",
+    "  width: 60px;",
+    "  padding: 0.3rem 0.25rem;",
     "  border: 1px solid #bdbdbd;",
     "  border-radius: 6px;",
-    "  font-size: 1rem;",
+    "  font-size: 1.4rem;",
+    "  font-weight: 600;",
     "  text-align: center;",
     "  background: #fafafa;",
     "  flex-shrink: 0;",
     "  -moz-appearance: textfield;",
     "}",
     ".qty-input::-webkit-inner-spin-button,",
-    ".qty-input::-webkit-outer-spin-button { opacity: 1; }",
+    ".qty-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }",
     ".qty-input:focus {",
-    "  outline: 2px solid #2e7d32;",
-    "  border-color: #2e7d32;",
+    "  outline: 2px solid #6d4c1f;",
+    "  border-color: #6d4c1f;",
     "  background: #fff;",
+    "}",
+    ".qty-input:disabled {",
+    "  background: #f5f5f5;",
+    "  color: #757575;",
+    "  border-color: #e0e0e0;",
+    "}",
+    ".qty-controls--disabled .qty-btn {",
+    "  background: #e0e0e0;",
+    "  color: #9e9e9e;",
     "}",
     ".product-qty-static {",
     "  font-weight: 600;",
-    "  color: #2e7d32;",
+    "  color: #6d4c1f;",
     "  font-size: 1rem;",
     "  flex-shrink: 0;",
     "}",
@@ -508,7 +567,7 @@ function _getCustomerCss() {
     "  display: block;",
     "  width: 100%;",
     "  padding: 0.9rem;",
-    "  background: #2e7d32;",
+    "  background: #6d4c1f;",
     "  color: #fff;",
     "  font-size: 1.05rem;",
     "  font-weight: 600;",
@@ -518,9 +577,9 @@ function _getCustomerCss() {
     "  transition: background 0.15s;",
     "  letter-spacing: 0.01em;",
     "}",
-    ".btn-save:hover { background: #1b5e20; }",
+    ".btn-save:hover { background: #4a2f0d; }",
     ".btn-save:disabled {",
-    "  background: #a5d6a7;",
+    "  background: #d4a96a;",
     "  cursor: not-allowed;",
     "}",
     "",
@@ -560,6 +619,38 @@ function _getCustomerJs(userId) {
     "  var summaryBox = document.getElementById('summary-box');",
     "",
     "  if (!form) return; // žádné otevřené týdny",
+    "",
+    "  // +/- tlačítka",
+    "  form.addEventListener('click', function (e) {",
+    "    var btn = e.target.closest('.qty-btn');",
+    "    if (!btn || btn.disabled) return;",
+    "    var targetId = btn.getAttribute('data-target');",
+    "    var input = document.getElementById(targetId);",
+    "    if (!input) return;",
+    "    var current = parseInt(input.value, 10);",
+    "    if (isNaN(current)) current = 0;",
+    "    if (btn.classList.contains('qty-btn--plus')) {",
+    "      input.value = current + 1;",
+    "    } else if (btn.classList.contains('qty-btn--minus')) {",
+    "      input.value = Math.max(0, current - 1);",
+    "    }",
+    "    input.blur();",
+    "  });",
+    "",
+    "  // Klik na název produktu (label) zvýší qty o 1",
+    "  form.addEventListener('click', function (e) {",
+    "    var label = e.target.closest('.product-label');",
+    "    if (!label) return;",
+    "    // Najdeme qty-input v nadřazeném product-row",
+    "    var row = label.closest('.product-row');",
+    "    if (!row) return;",
+    "    var input = row.querySelector('.qty-input');",
+    "    if (!input || input.disabled) return;",
+    "    var current = parseInt(input.value, 10);",
+    "    if (isNaN(current)) current = 0;",
+    "    input.value = current + 1;",
+    "    input.blur();",
+    "  });",
     "",
     "  form.addEventListener('submit', function (e) {",
     "    e.preventDefault();",

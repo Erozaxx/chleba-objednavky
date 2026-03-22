@@ -54,6 +54,5 @@ function renderNotFound() {
     '.box{text-align:center;padding:2rem;}h1{font-size:4rem;margin:0;color:#ccc;}p{color:#555;}</style>' +
     '</head><body><div class="box"><h1>404</h1><p>Stránka nebyla nalezena.</p></div></body></html>';
   return HtmlService.createHtmlOutput(html)
-    .setTitle("Stránka nenalezena")
-    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.DENY);
+    .setTitle("Stránka nenalezena");
 }

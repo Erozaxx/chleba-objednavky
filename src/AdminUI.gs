@@ -165,14 +165,15 @@ function adminGetWeeksOverview() {
       var ordersForWeek = getOrdersForWeek(ws.weekStart);
       var orderCount = ordersForWeek.length;
       result.push({
-        weekStart:   ws.weekStart,
-        bakingDay:   ws.bakingDay,
-        bakingDate:  formatDateISO(bakingDate),
-        bakingLabel: formatDateCZ(bakingDate),
-        closed:      ws.closed,
-        reason:      ws.reason,
-        notifiedAt:  ws.notifiedAt ? String(ws.notifiedAt) : null,
-        orderCount:  orderCount
+        weekStart:      ws.weekStart,
+        bakingDay:      ws.bakingDay,
+        bakingDate:     formatDateISO(bakingDate),
+        bakingLabel:    formatDateCZ(bakingDate),
+        closed:         ws.closed,
+        reason:         ws.reason,
+        notifiedAt:     ws.notifiedAt ? String(ws.notifiedAt) : null,
+        orderCount:     orderCount,
+        isBeforeCutoff: isBeforeCutoff(weekDate)
       });
     }
     return JSON.stringify(result);
@@ -255,14 +256,112 @@ function adminSetBakingDayOverride(weekStart, bakingDay) {
 }
 
 // ---------------------------------------------------------------------------
+// PŘEHLED – server-side handlers
+// ---------------------------------------------------------------------------
+
+/**
+ * Vrátí přehled objednávek pro aktuální týden (pondělí tohoto týdne).
+ * Výstup: { users: [{userId, name}], products: [{productId, name}], matrix: {"userId__productId": qty} }
+ */
+function adminGetThisWeekOverview() {
+  try {
+    var weekDate = getWeekStart(new Date());
+    var weekISO  = formatDateISO(weekDate);
+
+    var allUsers    = getAllUsers();  // seřazeni dle jména
+    var allProducts = getActiveProducts();
+    var orders      = getOrdersForWeek(weekISO);
+
+    // Sestavit matici
+    var matrix = {};
+    for (var o = 0; o < orders.length; o++) {
+      var ord = orders[o];
+      if (Number(ord.quantity) > 0) {
+        matrix[ord.userId + "__" + ord.productId] = Number(ord.quantity);
+      }
+    }
+
+    var usersOut = [];
+    for (var u = 0; u < allUsers.length; u++) {
+      usersOut.push({ userId: allUsers[u].userId, name: allUsers[u].name });
+    }
+
+    var productsOut = [];
+    for (var p = 0; p < allProducts.length; p++) {
+      productsOut.push({ productId: allProducts[p].productId, name: allProducts[p].name });
+    }
+
+    var bakingDate  = getBakingDate(weekDate);
+    var bakingLabel = formatDateCZ(bakingDate);
+
+    return JSON.stringify({
+      weekStart:   weekISO,
+      bakingLabel: bakingLabel,
+      users:       usersOut,
+      products:    productsOut,
+      matrix:      matrix
+    });
+  } catch (e) {
+    return JSON.stringify({ error: String(e) });
+  }
+}
+
+/**
+ * Vrátí výhled celkových objednávek pro příštích WEEKS_AHEAD týdnů.
+ * Výstup: { products: [{productId, name}], weeks: [{weekStart, label, closed}], matrix: {"productId__weekStart": total_qty} }
+ */
+function adminGetWeeklyTotals() {
+  try {
+    var allProducts = getActiveProducts();
+    var weeksSettings = getUpcomingWeeksSettings(CONFIG.WEEKS_AHEAD);
+
+    var weeksOut = [];
+    var matrix   = {};
+
+    for (var w = 0; w < weeksSettings.length; w++) {
+      var ws     = weeksSettings[w];
+      var wDate  = parseISO(ws.weekStart);
+      var bDate  = getBakingDate(wDate);
+      var label  = bDate.getDate() + ". " + (bDate.getMonth() + 1) + ".";
+      weeksOut.push({
+        weekStart: ws.weekStart,
+        label:     label,
+        closed:    ws.closed
+      });
+
+      var orders = getOrdersForWeek(ws.weekStart);
+      for (var o = 0; o < orders.length; o++) {
+        var ord = orders[o];
+        if (Number(ord.quantity) > 0) {
+          var key = ord.productId + "__" + ws.weekStart;
+          matrix[key] = (matrix[key] || 0) + Number(ord.quantity);
+        }
+      }
+    }
+
+    var productsOut = [];
+    for (var p = 0; p < allProducts.length; p++) {
+      productsOut.push({ productId: allProducts[p].productId, name: allProducts[p].name });
+    }
+
+    return JSON.stringify({
+      products: productsOut,
+      weeks:    weeksOut,
+      matrix:   matrix
+    });
+  } catch (e) {
+    return JSON.stringify({ error: String(e) });
+  }
+}
+
+// ---------------------------------------------------------------------------
 // renderAdminPage() – vrátí HtmlService output kompletního admin rozhraní
 // ---------------------------------------------------------------------------
 
 function renderAdminPage() {
   var html = _buildAdminHtml();
   return HtmlService.createHtmlOutput(html)
-    .setTitle("Admin – Objednávky chleba")
-    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+    .setTitle("Admin – Objednávky chleba");
 }
 
 function _buildAdminHtml() {
@@ -285,15 +384,40 @@ _adminCss() +
 '  <span class="logo">🍞 Admin – Objednávky chleba</span>\n' +
 '</header>\n' +
 '<nav class="tabs">\n' +
-'  <button class="tab-btn active" data-tab="customers">Zákazníci</button>\n' +
+'  <button class="tab-btn active" data-tab="overview">Přehled</button>\n' +
+'  <button class="tab-btn" data-tab="customers">Zákazníci</button>\n' +
 '  <button class="tab-btn" data-tab="products">Produkty</button>\n' +
 '  <button class="tab-btn" data-tab="weeks">Týdny</button>\n' +
 '</nav>\n' +
 '\n' +
 '<main class="content">\n' +
 '\n' +
+'  <!-- ========== TAB: PŘEHLED ========== -->\n' +
+'  <section id="tab-overview" class="tab-panel active">\n' +
+'    <div class="section-header">\n' +
+'      <h2>Přehled objednávek</h2>\n' +
+'      <button class="btn btn-secondary" onclick="loadOverview()">↺ Obnovit</button>\n' +
+'    </div>\n' +
+'\n' +
+'    <!-- Tabulka 1: Tento týden -->\n' +
+'    <div class="card" id="overview-thisweek-card">\n' +
+'      <h3 id="overview-thisweek-title" style="color:#5c4033;margin-bottom:12px">Objednávky tento týden</h3>\n' +
+'      <div id="overview-thisweek-loading" class="loading">Načítám…</div>\n' +
+'      <div id="overview-thisweek-error" class="error-msg hidden"></div>\n' +
+'      <div id="overview-thisweek-table" class="table-wrap hidden"></div>\n' +
+'    </div>\n' +
+'\n' +
+'    <!-- Tabulka 2: Výhled 8 týdnů -->\n' +
+'    <div class="card" id="overview-totals-card">\n' +
+'      <h3 style="color:#5c4033;margin-bottom:12px">Výhled ' + CONFIG.WEEKS_AHEAD + ' týdnů</h3>\n' +
+'      <div id="overview-totals-loading" class="loading">Načítám…</div>\n' +
+'      <div id="overview-totals-error" class="error-msg hidden"></div>\n' +
+'      <div id="overview-totals-table" class="table-wrap hidden"></div>\n' +
+'    </div>\n' +
+'  </section>\n' +
+'\n' +
 '  <!-- ========== TAB: ZÁKAZNÍCI ========== -->\n' +
-'  <section id="tab-customers" class="tab-panel active">\n' +
+'  <section id="tab-customers" class="tab-panel">\n' +
 '    <div class="section-header">\n' +
 '      <h2>Zákazníci</h2>\n' +
 '      <button class="btn btn-primary" onclick="showAddUserForm()">+ Přidat zákazníka</button>\n' +
@@ -498,10 +622,27 @@ function _adminCss() {
 '\n' +
 '/* Orders edit form */\n' +
 '.orders-week-block { background: #fdf6ee; border-left: 4px solid #c8a97e; padding: 14px 16px; margin-bottom: 14px; border-radius: 0 6px 6px 0; }\n' +
-'.orders-week-block h4 { color: #5c4033; font-size: 14px; margin-bottom: 10px; }\n' +
+'.orders-week-block.orders-week-block--closed { border-left-color: #aaa; background: #f5f5f5; opacity: 0.85; }\n' +
+'.orders-week-block h4 { color: #5c4033; font-size: 14px; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }\n' +
+'.orders-week-block--closed h4 { color: #888; }\n' +
+'.badge-closed-label { font-size: 11px; background: #e0e0e0; color: #666; padding: 2px 8px; border-radius: 10px; font-weight: normal; }\n' +
 '.orders-product-row { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }\n' +
 '.orders-product-row label { flex: 1; font-size: 14px; }\n' +
 '.orders-product-row input[type=number] { width: 80px; padding: 6px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }\n' +
+'.orders-product-row input[type=number]:disabled { background: #f0f0f0; color: #888; border-color: #e0e0e0; cursor: not-allowed; }\n' +
+'\n' +
+'/* Overview tables */\n' +
+'.overview-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 400px; }\n' +
+'.overview-table th { background: #5c4033; color: #fff; padding: 8px 10px; text-align: center; white-space: nowrap; }\n' +
+'.overview-table th:first-child { text-align: left; }\n' +
+'.overview-table td { padding: 7px 10px; border-bottom: 1px solid #f0e8e0; text-align: center; }\n' +
+'.overview-table td:first-child { text-align: left; font-weight: 500; }\n' +
+'.overview-table tr:last-child td { border-bottom: none; }\n' +
+'.overview-table tr:hover td { background: #fdf6ee; }\n' +
+'.overview-table .row-total td { background: #f5ede0; font-weight: bold; border-top: 2px solid #c8a97e; }\n' +
+'.overview-table .row-total td:first-child { color: #5c4033; }\n' +
+'.overview-table .col-zero { color: #ccc; }\n' +
+'.overview-table th.col-closed { background: #888; }\n' +
 '\n' +
 '/* Link copy */\n' +
 '.link-copy { font-size: 12px; color: #5c4033; cursor: pointer; text-decoration: underline; white-space: nowrap; }\n' +
@@ -547,6 +688,8 @@ function _adminJs() {
 '    document.querySelectorAll(".tab-panel").forEach(function(p) { p.classList.remove("active"); });\n' +
 '    btn.classList.add("active");\n' +
 '    document.getElementById("tab-" + tab).classList.add("active");\n' +
+'    if (tab === "overview") loadOverview();\n' +
+'    if (tab === "customers" && _users.length === 0) loadUsers();\n' +
 '    if (tab === "products" && _products.length === 0) loadProducts();\n' +
 '    if (tab === "weeks") loadWeeks();\n' +
 '  });\n' +
@@ -584,6 +727,144 @@ function _adminJs() {
 '    document.body.removeChild(ta);\n' +
 '    showToast("Odkaz zkopírován", "success");\n' +
 '  }\n' +
+'}\n' +
+'\n' +
+'// ================================================================\n' +
+'// PŘEHLED\n' +
+'// ================================================================\n' +
+'\n' +
+'function loadOverview() {\n' +
+'  loadThisWeekOverview();\n' +
+'  loadWeeklyTotals();\n' +
+'}\n' +
+'\n' +
+'function loadThisWeekOverview() {\n' +
+'  var ldEl  = document.getElementById("overview-thisweek-loading");\n' +
+'  var errEl = document.getElementById("overview-thisweek-error");\n' +
+'  var wrap  = document.getElementById("overview-thisweek-table");\n' +
+'  ldEl.classList.remove("hidden");\n' +
+'  errEl.classList.add("hidden");\n' +
+'  wrap.classList.add("hidden");\n' +
+'  google.script.run\n' +
+'    .withSuccessHandler(function(json) {\n' +
+'      ldEl.classList.add("hidden");\n' +
+'      try {\n' +
+'        var data = JSON.parse(json);\n' +
+'        if (data.error) throw new Error(data.error);\n' +
+'        var titleEl = document.getElementById("overview-thisweek-title");\n' +
+'        titleEl.textContent = "Objedn\\u00e1vky tento t\\u00fdden \\u2013 pe\\u010den\\u00ed " + data.bakingLabel;\n' +
+'        wrap.innerHTML = renderThisWeekTable(data);\n' +
+'        wrap.classList.remove("hidden");\n' +
+'      } catch(e) {\n' +
+'        errEl.textContent = "Chyba: " + e.message;\n' +
+'        errEl.classList.remove("hidden");\n' +
+'      }\n' +
+'    })\n' +
+'    .withFailureHandler(function(e) {\n' +
+'      ldEl.classList.add("hidden");\n' +
+'      errEl.textContent = "Chyba: " + e.message;\n' +
+'      errEl.classList.remove("hidden");\n' +
+'    })\n' +
+'    .adminGetThisWeekOverview();\n' +
+'}\n' +
+'\n' +
+'function renderThisWeekTable(data) {\n' +
+'  var users    = data.users    || [];\n' +
+'  var products = data.products || [];\n' +
+'  var matrix   = data.matrix   || {};\n' +
+'  if (products.length === 0) return \'<p style="color:#999">\\u017d\\u00e1dn\\u00e9 aktivn\\u00ed produkty.</p>\';\n' +
+'  if (users.length === 0)    return \'<p style="color:#999">\\u017d\\u00e1dn\\u00ed z\\u00e1kazn\\u00edci.</p>\';\n' +
+'  var html = \'<table class="overview-table"><thead><tr><th>Z\\u00e1kazn\\u00edk</th>\';\n' +
+'  for (var p = 0; p < products.length; p++) {\n' +
+'    html += \'<th>\' + esc(products[p].name) + \'</th>\';\n' +
+'  }\n' +
+'  html += \'</tr></thead><tbody>\';\n' +
+'  var totals = {};\n' +
+'  for (var u = 0; u < users.length; u++) {\n' +
+'    var user = users[u];\n' +
+'    html += \'<tr><td>\' + esc(user.name) + \'</td>\';\n' +
+'    for (var pp = 0; pp < products.length; pp++) {\n' +
+'      var key = user.userId + "__" + products[pp].productId;\n' +
+'      var qty = matrix[key] || 0;\n' +
+'      totals[products[pp].productId] = (totals[products[pp].productId] || 0) + qty;\n' +
+'      html += \'<td class="\' + (qty === 0 ? "col-zero" : "") + \'">\' + qty + \'</td>\';\n' +
+'    }\n' +
+'    html += \'</tr>\';\n' +
+'  }\n' +
+'  // Řádek CELKEM\n' +
+'  html += \'<tr class="row-total"><td>CELKEM</td>\';\n' +
+'  var grandTotal = 0;\n' +
+'  for (var pt = 0; pt < products.length; pt++) {\n' +
+'    var t = totals[products[pt].productId] || 0;\n' +
+'    grandTotal += t;\n' +
+'    html += \'<td>\' + t + \'</td>\';\n' +
+'  }\n' +
+'  html += \'</tr>\';\n' +
+'  html += \'</tbody></table>\';\n' +
+'  return html;\n' +
+'}\n' +
+'\n' +
+'function loadWeeklyTotals() {\n' +
+'  var ldEl  = document.getElementById("overview-totals-loading");\n' +
+'  var errEl = document.getElementById("overview-totals-error");\n' +
+'  var wrap  = document.getElementById("overview-totals-table");\n' +
+'  ldEl.classList.remove("hidden");\n' +
+'  errEl.classList.add("hidden");\n' +
+'  wrap.classList.add("hidden");\n' +
+'  google.script.run\n' +
+'    .withSuccessHandler(function(json) {\n' +
+'      ldEl.classList.add("hidden");\n' +
+'      try {\n' +
+'        var data = JSON.parse(json);\n' +
+'        if (data.error) throw new Error(data.error);\n' +
+'        wrap.innerHTML = renderWeeklyTotalsTable(data);\n' +
+'        wrap.classList.remove("hidden");\n' +
+'      } catch(e) {\n' +
+'        errEl.textContent = "Chyba: " + e.message;\n' +
+'        errEl.classList.remove("hidden");\n' +
+'      }\n' +
+'    })\n' +
+'    .withFailureHandler(function(e) {\n' +
+'      ldEl.classList.add("hidden");\n' +
+'      errEl.textContent = "Chyba: " + e.message;\n' +
+'      errEl.classList.remove("hidden");\n' +
+'    })\n' +
+'    .adminGetWeeklyTotals();\n' +
+'}\n' +
+'\n' +
+'function renderWeeklyTotalsTable(data) {\n' +
+'  var products = data.products || [];\n' +
+'  var weeks    = data.weeks    || [];\n' +
+'  var matrix   = data.matrix   || {};\n' +
+'  if (products.length === 0) return \'<p style="color:#999">\\u017d\\u00e1dn\\u00e9 aktivn\\u00ed produkty.</p>\';\n' +
+'  if (weeks.length === 0)    return \'<p style="color:#999">\\u017d\\u00e1dn\\u00e9 t\\u00fddny k zobrazen\\u00ed.</p>\';\n' +
+'  var html = \'<table class="overview-table"><thead><tr><th>Produkt</th>\';\n' +
+'  for (var w = 0; w < weeks.length; w++) {\n' +
+'    var weekCls = weeks[w].closed ? " col-closed" : "";\n' +
+'    var label = esc(weeks[w].label) + (weeks[w].closed ? " (zavř.)" : "");\n' +
+'    html += \'<th class="\' + weekCls + \'">\' + label + \'</th>\';\n' +
+'  }\n' +
+'  html += \'</tr></thead><tbody>\';\n' +
+'  var weekTotals = {};\n' +
+'  for (var p = 0; p < products.length; p++) {\n' +
+'    var prod = products[p];\n' +
+'    html += \'<tr><td>\' + esc(prod.name) + \'</td>\';\n' +
+'    for (var ww = 0; ww < weeks.length; ww++) {\n' +
+'      var key = prod.productId + "__" + weeks[ww].weekStart;\n' +
+'      var qty = matrix[key] || 0;\n' +
+'      weekTotals[weeks[ww].weekStart] = (weekTotals[weeks[ww].weekStart] || 0) + qty;\n' +
+'      html += \'<td class="\' + (qty === 0 ? "col-zero" : "") + \'">\' + qty + \'</td>\';\n' +
+'    }\n' +
+'    html += \'</tr>\';\n' +
+'  }\n' +
+'  // Řádek CELKEM\n' +
+'  html += \'<tr class="row-total"><td>CELKEM</td>\';\n' +
+'  for (var wt = 0; wt < weeks.length; wt++) {\n' +
+'    html += \'<td>\' + (weekTotals[weeks[wt].weekStart] || 0) + \'</td>\';\n' +
+'  }\n' +
+'  html += \'</tr>\';\n' +
+'  html += \'</tbody></table>\';\n' +
+'  return html;\n' +
 '}\n' +
 '\n' +
 '// ================================================================\n' +
@@ -799,17 +1080,22 @@ function _adminJs() {
 '  var html = "";\n' +
 '  for (var w = 0; w < weeks.length; w++) {\n' +
 '    var week = weeks[w];\n' +
-'    // Admin vidí všechny týdny (bez cutoff omezení)\n' +
+'    // Admin vidí všechny týdny (bez cutoff omezení na zápis)\n' +
 '    if (week.closed) {\n' +
-'      html += \'<div class="orders-week-block" style="opacity:0.5">\' +\n' +
-'              \'<h4>🔒 \' + esc(week.bakingLabel) + \' – ZAVŘENO\' + (week.reason ? \' (\' + esc(week.reason) + \')\' : \'\') + \'</h4>\' +\n' +
+'      html += \'<div class="orders-week-block orders-week-block--closed">\' +\n' +
+'              \'<h4>\\uD83D\\uDD12 \' + esc(week.bakingLabel) + \' \\u2013 ZAV\\u0158ENO\' + (week.reason ? \' (\' + esc(week.reason) + \')\' : \'\') + \'</h4>\' +\n' +
 '              \'</div>\';\n' +
 '      continue;\n' +
 '    }\n' +
-'    html += \'<div class="orders-week-block">\';\n' +
-'    html += \'<h4>Pečení: \' + esc(week.bakingLabel) + \'</h4>\';\n' +
+'    // Zjistit zda je týden po cutoffu (informativní – admin může přesto uložit)\n' +
+'    var isPastCutoff = !week.isBeforeCutoff;\n' +
+'    var blockClass = "orders-week-block" + (isPastCutoff ? " orders-week-block--closed" : "");\n' +
+'    html += \'<div class="\' + blockClass + \'">\';\n' +
+'    html += \'<h4>Pe\\u010den\\u00ed: \' + esc(week.bakingLabel);\n' +
+'    if (isPastCutoff) html += \' <span class="badge-closed-label">Uzav\\u0159eno</span>\';\n' +
+'    html += \'</h4>\';\n' +
 '    if (activeProducts.length === 0) {\n' +
-'      html += \'<p style="color:#999;font-size:13px">Žádné aktivní produkty</p>\';\n' +
+'      html += \'<p style="color:#999;font-size:13px">\\u017d\\u00e1dn\\u00e9 aktivn\\u00ed produkty</p>\';\n' +
 '    }\n' +
 '    for (var p = 0; p < activeProducts.length; p++) {\n' +
 '      var prod = activeProducts[p];\n' +
@@ -819,10 +1105,12 @@ function _adminJs() {
 '      html += \'<label>\' + esc(prod.name);\n' +
 '      if (prod.description) html += \' <small style="color:#999">\' + esc(prod.description) + \'</small>\';\n' +
 '      html += \'</label>\';\n' +
+'      var disabledAttr = isPastCutoff ? \' disabled\' : \'\';\n' +
+'      var disabledStyle = isPastCutoff ? \' style="background:#f0f0f0;color:#888"\' : \'\';\n' +
 '      html += \'<input type="number" min="0" step="1" value="\' + qty + \'"\' +\n' +
 '              \' data-week="\' + esc(week.weekStart) + \'"\' +\n' +
 '              \' data-product="\' + esc(prod.productId) + \'"\' +\n' +
-'              \' class="order-qty-input">\';\n' +
+'              \' class="order-qty-input"\' + disabledAttr + disabledStyle + \'>\';\n' +
 '      html += \'</div>\';\n' +
 '    }\n' +
 '    html += \'</div>\';\n' +
@@ -1124,7 +1412,7 @@ function _adminJs() {
 '}\n' +
 '\n' +
 '// ================================================================\n' +
-'// INIT – načíst zákazníky při startu\n' +
+'// INIT – načíst přehled při startu\n' +
 '// ================================================================\n' +
-'loadUsers();\n';
+'loadOverview();\n';
 }
