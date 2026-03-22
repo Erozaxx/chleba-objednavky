@@ -1,0 +1,33 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+      'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  }
+
+  html {
+    @apply text-gray-900 antialiased;
+  }
+
+  body {
+    @apply bg-dough-100 min-h-screen;
+  }
+}
+
+@layer components {
+  /* Sdílené utility třídy */
+  .btn-primary {
+    @apply bg-bread-500 hover:bg-bread-600 text-white font-semibold px-4 py-2 rounded-lg transition-colors;
+  }
+
+  .btn-secondary {
+    @apply bg-dough-200 hover:bg-dough-100 text-bread-800 font-semibold px-4 py-2 rounded-lg border border-crust-light transition-colors;
+  }
+
+  .card {
+    @apply bg-white rounded-xl shadow-sm border border-dough-200 p-6;
+  }
+}
