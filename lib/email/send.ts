@@ -198,13 +198,15 @@ export async function sendBakingEve(
 
     try {
       // Use Resend scheduledAt parameter for delayed delivery
+      // scheduledAt is supported by Resend API but not yet in SDK types (resend@3.x)
+      type EmailOptsWithScheduled = Parameters<typeof resend.emails.send>[0] & { scheduledAt?: string };
       const result = await resend.emails.send({
         from: EMAIL_FROM,
         to: user.email,
         subject: `Připomínka – zítra se peče (${formattedBaking})`,
         html,
         scheduledAt: scheduledAt.toISOString(),
-      });
+      } as EmailOptsWithScheduled);
 
       const success = !result.error;
       await logEmail('BAKING_EVE', user.id, null, success, result.error?.message);
