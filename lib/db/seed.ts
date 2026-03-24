@@ -109,7 +109,7 @@ async function seed(): Promise<void> {
       .onConflictDoNothing()
       .returning();
 
-    let product = insertResult[0];
+    let product: (typeof insertResult)[0] | undefined = insertResult[0];
 
     if (!product) {
       // Row already existed (conflict); fetch it by name
