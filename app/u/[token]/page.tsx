@@ -13,7 +13,7 @@ import { redirect } from 'next/navigation';
 import { db } from '@/lib/db/client';
 import { users, products, orders, weekSettings } from '@/lib/db/schema';
 import { eq, and, asc } from 'drizzle-orm';
-import { getWeekStart, isBeforeCutoff, formatDateISO, formatDateCZ, getBakingDate } from '@/lib/week/utils';
+import { getWeekStart, isBeforeCutoff, formatDateISO, formatDateCZ, getBakingDate, getNextWeekStart } from '@/lib/week/utils';
 import OrderForm from '@/components/customer/OrderForm';
 import type { Product, ExistingOrder } from '@/components/customer/OrderForm';
 import SkipWeekButton from '@/components/customer/SkipWeekButton';
@@ -108,16 +108,18 @@ export default async function CustomerPage({ params }: { params: { token: string
         />
         {/* Next week skip control */}
         {(() => {
-          const nextWeek = new Date(weekStart);
-          nextWeek.setDate(nextWeek.getDate() + 7);
+          const nextWeek = getNextWeekStart(weekStart, 1);
           const nextWeekISO = formatDateISO(nextWeek);
           const nextWeekLabel = nextWeek.toLocaleDateString('cs-CZ', {
             day: 'numeric', month: 'long', year: 'numeric',
           });
+          const weekAfterNext = getNextWeekStart(weekStart, 2);
+          const weekAfterNextISO = formatDateISO(weekAfterNext);
           return (
             <SkipWeekButton
               nextWeekStart={nextWeekISO}
               nextWeekLabel={nextWeekLabel}
+              weekAfterNext={weekAfterNextISO}
               currentSkipUntil={user.skipUntil ?? null}
               customerToken={token}
             />

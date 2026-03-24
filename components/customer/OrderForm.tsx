@@ -223,6 +223,11 @@ export default function OrderForm({
                       {product.description}
                     </p>
                   )}
+                  {state.isTemporary && state.originalQuantity != null && state.originalQuantity > 0 && (
+                    <p className="text-xs text-bread-500 mt-0.5">
+                      Standardně: {state.originalQuantity} ks
+                    </p>
+                  )}
                 </div>
                 <QtyControl
                   quantity={state.quantity}
