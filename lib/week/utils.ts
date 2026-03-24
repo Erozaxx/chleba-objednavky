@@ -90,6 +90,21 @@ export function formatDateISO(date: Date): string {
 }
 
 /**
+ * Vrátí datum pondělí o `offsetWeeks` týdnů od zadaného weekStart.
+ * Předpokládá, že `base` je pondělí (výsledek getWeekStart nebo getNextWeekStart).
+ *
+ * @param base        - výchozí pondělí (Date objekt)
+ * @param offsetWeeks - počet týdnů dopředu (default 1)
+ * @returns Date objekt pondělí o `offsetWeeks` týdnů dále
+ *
+ * Edge case EC-007: pokud je skip_until nastaven adminem na 3+ týdny,
+ * tento util není dotčen – UI zobrazí "2 týdny" jako cap, viz SkipWeekButton.
+ */
+export function getNextWeekStart(base: Date, offsetWeeks: number = 1): Date {
+  return new Date(base.getTime() + offsetWeeks * 7 * 24 * 60 * 60 * 1000);
+}
+
+/**
  * Parsuje ISO datum string "YYYY-MM-DD" na Date objekt (lokální čas, 00:00:00).
  *
  * @throws {Error} pokud formát není validní YYYY-MM-DD
