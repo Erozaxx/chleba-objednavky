@@ -45,8 +45,28 @@ export function getBakingDate(weekStart: Date, bakingDay: number = DEFAULT_BAKIN
 }
 
 /**
+ * Vrátí datum uzávěrky objednávek: den PŘED pečením v 17:00.
+ * Např. bakingDay=5 (pátek) → uzávěrka = čtvrtek 17:00.
+ *
+ * @param weekStart  - pondělí daného týdne
+ * @param bakingDay  - ISO weekday dne pečení (výchozí pátek = 5)
+ * @param cutoffHour - hodina uzávěrky (výchozí 17)
+ */
+export function getDeadlineDate(
+  weekStart: Date,
+  bakingDay: number = DEFAULT_BAKING_DAY,
+  cutoffHour: number = 17,
+): Date {
+  const bakingDate = getBakingDate(weekStart, bakingDay);
+  const deadline = new Date(bakingDate);
+  deadline.setDate(deadline.getDate() - 1); // den před pečením
+  deadline.setHours(cutoffHour, 0, 0, 0);
+  return deadline;
+}
+
+/**
  * Vrátí true pokud je aktuální čas PŘED uzávěrkou objednávek.
- * Uzávěrka = den pečení v 17:00 (pevně daná hodina).
+ * Uzávěrka = den PŘED pečením v 17:00.
  *
  * @param weekStart  - pondělí daného týdne
  * @param bakingDay  - ISO weekday dne pečení (výchozí pátek = 5)
@@ -59,10 +79,7 @@ export function isBeforeCutoff(
   cutoffHour: number = 17,
   now: Date = new Date(),
 ): boolean {
-  const bakingDate = getBakingDate(weekStart, bakingDay);
-  const cutoff = new Date(bakingDate);
-  cutoff.setHours(cutoffHour, 0, 0, 0);
-  return now < cutoff;
+  return now < getDeadlineDate(weekStart, bakingDay, cutoffHour);
 }
 
 /**
