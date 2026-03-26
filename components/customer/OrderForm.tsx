@@ -24,6 +24,8 @@ export interface Product {
   id: string;
   name: string;
   description: string | null;
+  /** Cena v haléřích (např. 3500 = 35 Kč). */
+  priceKc: number;
 }
 
 export interface ExistingOrder {
@@ -31,6 +33,8 @@ export interface ExistingOrder {
   quantity: number;
   isTemporary: boolean;
   originalQuantity: number | null;
+  /** Qty trvalé objednávky (0 pokud žádná). Předává server při SSR. */
+  permanentQty: number;
 }
 
 interface OrderFormProps {
@@ -41,12 +45,16 @@ interface OrderFormProps {
   deadlineInfo: string;
   userName: string;
   customerToken: string;
+  /** Callback volaný při každé změně qty – předává součet qty*priceKc v haléřích. */
+  onRegularTotalChange?: (total: number) => void;
 }
 
 interface OrderState {
   quantity: number;
   isTemporary: boolean;
   originalQuantity: number | null;
+  /** Snapshot qty trvalé objednávky ze SSR. Nemění se v průběhu session. */
+  permanentQty: number;
 }
 
 type SaveStatus = 'idle' | 'pending' | 'saving' | 'saved' | 'error';
@@ -65,6 +73,7 @@ export default function OrderForm({
   deadlineInfo,
   userName,
   customerToken,
+  onRegularTotalChange,
 }: OrderFormProps) {
   // Initialize order state from existing orders
   const buildInitialState = (): Record<string, OrderState> => {
@@ -75,6 +84,7 @@ export default function OrderForm({
         quantity: existing?.quantity ?? 0,
         isTemporary: existing?.isTemporary ?? false,
         originalQuantity: existing?.originalQuantity ?? null,
+        permanentQty: existing?.permanentQty ?? 0,
       };
     }
     return state;
@@ -148,14 +158,58 @@ export default function OrderForm({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderState]);
 
+  // Notify parent (CustomerOrderPage) of updated regular total on every orderState change.
+  useEffect(() => {
+    if (!onRegularTotalChange) return;
+    const newTotal = products.reduce((sum, product) => {
+      const qty = orderState[product.id]?.quantity ?? 0;
+      return sum + qty * product.priceKc;
+    }, 0);
+    onRegularTotalChange(newTotal);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderState]);
+
   const handleQuantityChange = useCallback((productId: string, newQty: number) => {
-    setOrderState((prev) => ({
-      ...prev,
-      [productId]: {
-        ...prev[productId],
-        quantity: newQty,
-      },
-    }));
+    setOrderState((prev) => {
+      const current = prev[productId];
+      const { permanentQty } = current;
+
+      // Auto-isTemporary logika (pouze pokud existuje trvalá objednávka s nenulovou hodnotou)
+      if (permanentQty > 0) {
+        if (newQty === permanentQty) {
+          // Uživatel vrátil qty na trvalou hodnotu → undo dočasné změny
+          return {
+            ...prev,
+            [productId]: {
+              ...current,
+              quantity: newQty,
+              isTemporary: false,
+              originalQuantity: null,
+            },
+          };
+        } else {
+          // Qty se liší od trvalé → automaticky dočasná změna
+          return {
+            ...prev,
+            [productId]: {
+              ...current,
+              quantity: newQty,
+              isTemporary: true,
+              originalQuantity: permanentQty,
+            },
+          };
+        }
+      }
+
+      // permanentQty === 0: nová trvalá objednávka, žádná automatika
+      return {
+        ...prev,
+        [productId]: {
+          ...current,
+          quantity: newQty,
+        },
+      };
+    });
   }, []);
 
   const handleTemporaryToggle = useCallback((productId: string) => {
@@ -217,6 +271,11 @@ export default function OrderForm({
                 <div className="flex-1 min-w-0">
                   <h3 className="font-semibold text-bread-800 text-base">
                     {product.name}
+                    {product.priceKc > 0 && (
+                      <span className="ml-2 text-sm font-normal text-bread-500">
+                        {Math.floor(product.priceKc / 100)} Kč
+                      </span>
+                    )}
                   </h3>
                   {product.description && (
                     <p className="text-sm text-gray-500 mt-0.5 truncate">

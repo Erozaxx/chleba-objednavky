@@ -11,11 +11,12 @@
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { db } from '@/lib/db/client';
-import { users, products, orders, weekSettings } from '@/lib/db/schema';
+import { users, products, orders, weekSettings, oneshotOrders } from '@/lib/db/schema';
 import { eq, and, asc } from 'drizzle-orm';
 import { getWeekStart, isBeforeCutoff, formatDateISO, formatDateCZ, getBakingDate, getNextWeekStart } from '@/lib/week/utils';
-import OrderForm from '@/components/customer/OrderForm';
+import CustomerOrderPage from '@/components/customer/CustomerOrderPage';
 import type { Product, ExistingOrder } from '@/components/customer/OrderForm';
+import type { OneshotProduct, InitialOneshotOrder } from '@/components/customer/OneshotSection';
 import SkipWeekButton from '@/components/customer/SkipWeekButton';
 
 export default async function CustomerPage({ params }: { params: { token: string } }) {
@@ -63,41 +64,72 @@ export default async function CustomerPage({ params }: { params: { token: string
       ? `Objednávky lze měnit do ${formatDateCZ(bakingDate)} 17:00.`
       : `Uzávěrka proběhla ${formatDateCZ(bakingDate)} 17:00 – objednávky jsou uzamčeny.`;
 
-  // Fetch active products
-  const activeProducts = await db
-    .select()
-    .from(products)
-    .where(eq(products.active, true))
-    .orderBy(asc(products.sortOrder), asc(products.name));
+  // Fetch active products + oneshot products souběžně (Promise.all)
+  const [activeProducts, oneshotProductsRaw, existingOrdersRaw, existingOneshotOrdersRaw] =
+    await Promise.all([
+      // Pravidelné produkty
+      db
+        .select()
+        .from(products)
+        .where(eq(products.active, true))
+        .orderBy(asc(products.sortOrder), asc(products.name)),
+      // Oneshot katalog: active=true + oneshotVisible=true
+      db
+        .select()
+        .from(products)
+        .where(and(eq(products.active, true), eq(products.oneshotVisible, true)))
+        .orderBy(asc(products.sortOrder), asc(products.name)),
+      // Pravidelné objednávky uživatele pro aktuální týden
+      db
+        .select()
+        .from(orders)
+        .where(and(eq(orders.userId, userId), eq(orders.weekStart, weekStartISO))),
+      // Jednorázové objednávky uživatele pro aktuální týden
+      db
+        .select()
+        .from(oneshotOrders)
+        .where(and(eq(oneshotOrders.userId, userId), eq(oneshotOrders.weekStart, weekStartISO))),
+    ]);
 
   const productData: Product[] = activeProducts.map((p) => ({
     id: p.id,
     name: p.name,
     description: p.description,
+    priceKc: p.priceKc,
   }));
 
-  // Fetch existing orders for this user and week
-  const existingOrders = await db
-    .select()
-    .from(orders)
-    .where(
-      and(
-        eq(orders.userId, userId),
-        eq(orders.weekStart, weekStartISO),
-      ),
-    );
+  const oneshotProductData: OneshotProduct[] = oneshotProductsRaw.map((p) => ({
+    id: p.id,
+    name: p.name,
+    description: p.description,
+    priceKc: p.priceKc,
+  }));
 
-  const orderData: ExistingOrder[] = existingOrders.map((o) => ({
+  const orderData: ExistingOrder[] = existingOrdersRaw.map((o) => ({
     productId: o.productId,
     quantity: o.quantity,
     isTemporary: o.isTemporary,
     originalQuantity: o.originalQuantity,
+    // permanentQty = qty trvalé objednávky: original pokud dočasná, jinak aktuální qty
+    permanentQty: o.isTemporary ? (o.originalQuantity ?? 0) : o.quantity,
   }));
+
+  const initialOneshotOrders: InitialOneshotOrder[] = existingOneshotOrdersRaw.map((o) => ({
+    productId: o.productId,
+    quantity: o.quantity,
+  }));
+
+  // Počáteční celková hodnota pravidelných objednávek v haléřích.
+  // Výpočet na serveru – klient přepočítává lokálně při každé změně qty.
+  const priceMap = new Map(productData.map((p) => [p.id, p.priceKc]));
+  const initialTotal = orderData.reduce((sum, o) => {
+    return sum + o.quantity * (priceMap.get(o.productId) ?? 0);
+  }, 0);
 
   return (
     <main className="min-h-screen bg-dough-100 px-4 py-6 sm:py-10">
       <div className="max-w-md mx-auto">
-        <OrderForm
+        <CustomerOrderPage
           products={productData}
           existingOrders={orderData}
           weekStart={weekStartISO}
@@ -105,6 +137,9 @@ export default async function CustomerPage({ params }: { params: { token: string
           deadlineInfo={deadlineInfo}
           userName={user.name}
           customerToken={token}
+          initialTotal={initialTotal}
+          oneshotProducts={oneshotProductData}
+          initialOneshotOrders={initialOneshotOrders}
         />
         {/* Next week skip control */}
         {(() => {

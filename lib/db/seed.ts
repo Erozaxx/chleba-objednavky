@@ -91,10 +91,18 @@ async function seed(): Promise<void> {
 
   // -- products --------------------------------------------------------------
 
+  // Pravidelné produkty (oneshotVisible: false = default)
   const productDefs = [
-    { name: 'Žitný chleba', sortOrder: 1 },
-    { name: 'Pšeničný chleba', sortOrder: 2 },
-    { name: 'Špaldový chleba', sortOrder: 3 },
+    { name: 'Žitný chleba', sortOrder: 1, priceKc: 3500 },
+    { name: 'Pšeničný chleba', sortOrder: 2, priceKc: 3200 },
+    { name: 'Špaldový chleba', sortOrder: 3, priceKc: 3800 },
+  ] as const;
+
+  // Jednorázové produkty (oneshotVisible: true)
+  const oneshotProductDefs = [
+    { name: 'Celozrnný bagel', sortOrder: 10, priceKc: 1500, description: 'Jednorázová nabídka – celozrnný bagel' },
+    { name: 'Škvarkový chléb', sortOrder: 11, priceKc: 4200, description: 'Jednorázová nabídka – škvarkový chléb' },
+    { name: 'Rozmarýnová focaccia', sortOrder: 12, priceKc: 2800, description: 'Jednorázová nabídka – focaccia s rozmarýnem' },
   ] as const;
 
   const insertedProducts = [];
@@ -105,7 +113,7 @@ async function seed(): Promise<void> {
     // the SELECT fallback below.
     const insertResult = await db
       .insert(products)
-      .values({ name: def.name, active: true, sortOrder: def.sortOrder })
+      .values({ name: def.name, active: true, sortOrder: def.sortOrder, priceKc: def.priceKc, oneshotVisible: false })
       .onConflictDoNothing()
       .returning();
 
@@ -123,6 +131,37 @@ async function seed(): Promise<void> {
 
     insertedProducts.push(product);
     console.log(`Seed: product "${product.name}" created (id=${product.id})`);
+  }
+
+  // -- oneshot products ------------------------------------------------------
+
+  for (const def of oneshotProductDefs) {
+    const insertResult = await db
+      .insert(products)
+      .values({
+        name: def.name,
+        description: def.description,
+        active: true,
+        sortOrder: def.sortOrder,
+        priceKc: def.priceKc,
+        oneshotVisible: true,
+      })
+      .onConflictDoNothing()
+      .returning();
+
+    let oneshotProduct: (typeof insertResult)[0] | undefined = insertResult[0];
+
+    if (!oneshotProduct) {
+      // Row already existed (conflict); fetch it by name
+      const rows = await db.select().from(products);
+      oneshotProduct = rows.find((p) => p.name === def.name);
+    }
+
+    if (!oneshotProduct) {
+      throw new Error(`Seed: failed to insert or find oneshot product "${def.name}"`);
+    }
+
+    console.log(`Seed: oneshot product "${oneshotProduct.name}" created (id=${oneshotProduct.id})`);
   }
 
   // -- week_settings ---------------------------------------------------------
