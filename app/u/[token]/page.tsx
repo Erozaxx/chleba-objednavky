@@ -13,7 +13,7 @@ import { redirect } from 'next/navigation';
 import { db } from '@/lib/db/client';
 import { users, products, orders, weekSettings, oneshotOrders } from '@/lib/db/schema';
 import { eq, and, asc } from 'drizzle-orm';
-import { getWeekStart, isBeforeCutoff, formatDateISO, formatDateCZ, getBakingDate, getNextWeekStart } from '@/lib/week/utils';
+import { getWeekStart, isBeforeCutoff, formatDateISO, formatDateCZ, getDeadlineDate, getNextWeekStart } from '@/lib/week/utils';
 import CustomerOrderPage from '@/components/customer/CustomerOrderPage';
 import type { Product, ExistingOrder } from '@/components/customer/OrderForm';
 import type { OneshotProduct, InitialOneshotOrder } from '@/components/customer/OneshotSection';
@@ -56,13 +56,13 @@ export default async function CustomerPage({ params }: { params: { token: string
   // Check if before cutoff
   const editable = !isClosed && isBeforeCutoff(weekStart, bakingDay);
 
-  // Baking date for deadline info
-  const bakingDate = getBakingDate(weekStart, bakingDay);
+  // Deadline date = den před pečením v 17:00
+  const deadlineDate = getDeadlineDate(weekStart, bakingDay);
   const deadlineInfo = isClosed
     ? 'Tento týden je uzavřen pro objednávky.'
     : editable
-      ? `Objednávky lze měnit do ${formatDateCZ(bakingDate)} 17:00.`
-      : `Uzávěrka proběhla ${formatDateCZ(bakingDate)} 17:00 – objednávky jsou uzamčeny.`;
+      ? `Objednávky lze měnit do ${formatDateCZ(deadlineDate)} 17:00.`
+      : `Uzávěrka proběhla ${formatDateCZ(deadlineDate)} 17:00 – objednávky jsou uzamčeny.`;
 
   // Fetch active products + oneshot products souběžně (Promise.all)
   const [activeProducts, oneshotProductsRaw, existingOrdersRaw, existingOneshotOrdersRaw] =
