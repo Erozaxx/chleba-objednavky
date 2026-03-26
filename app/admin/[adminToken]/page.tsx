@@ -121,6 +121,8 @@ export default async function AdminPage({ params }: AdminPageProps) {
               description: p.description,
               active: p.active,
               sortOrder: p.sortOrder,
+              priceKc: p.priceKc,
+              oneshotVisible: p.oneshotVisible,
             }))}
             adminToken={adminToken}
           />

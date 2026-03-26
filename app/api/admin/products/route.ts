@@ -24,6 +24,8 @@ export async function GET(): Promise<NextResponse> {
         description: p.description,
         active: p.active,
         sortOrder: p.sortOrder,
+        priceKc: p.priceKc,
+        oneshotVisible: p.oneshotVisible,
       })),
     });
   } catch (error) {
@@ -35,10 +37,18 @@ export async function GET(): Promise<NextResponse> {
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     const body = await request.json();
-    const { name, description } = body;
+    const { name, description, priceKc, oneshotVisible } = body;
 
     if (!name || typeof name !== 'string' || !name.trim()) {
       return NextResponse.json({ error: 'Název produktu je povinný.' }, { status: 400 });
+    }
+
+    if (priceKc !== undefined && (typeof priceKc !== 'number' || !Number.isInteger(priceKc) || priceKc < 0)) {
+      return NextResponse.json({ error: 'Cena musí být nezáporné celé číslo (haléře).' }, { status: 400 });
+    }
+
+    if (oneshotVisible !== undefined && typeof oneshotVisible !== 'boolean') {
+      return NextResponse.json({ error: 'oneshotVisible musí být boolean.' }, { status: 400 });
     }
 
     const [newProduct] = await db
@@ -46,6 +56,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       .values({
         name: name.trim(),
         description: description?.trim() || null,
+        priceKc: priceKc ?? 0,
+        oneshotVisible: oneshotVisible ?? false,
       })
       .returning();
 
@@ -56,6 +68,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         description: newProduct.description,
         active: newProduct.active,
         sortOrder: newProduct.sortOrder,
+        priceKc: newProduct.priceKc,
+        oneshotVisible: newProduct.oneshotVisible,
       },
     });
   } catch (error) {
