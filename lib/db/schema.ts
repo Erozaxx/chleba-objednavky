@@ -58,10 +58,15 @@ export const products = pgTable('products', {
   description: text('description'),
   active: boolean('active').notNull().default(true),
   sortOrder: integer('sort_order').notNull().default(0),
+  /** Cena v haléřích (např. 3500 = 35 Kč). Eliminuje floating-point chyby. */
+  priceKc: integer('price_kc').notNull().default(0),
+  /** true = produkt se zobrazuje v katalogu jednorázových položek */
+  oneshotVisible: boolean('oneshot_visible').notNull().default(false),
 });
 
 export const productsRelations = relations(products, ({ many }) => ({
   orders: many(orders),
+  oneshotOrders: many(oneshotOrders),
 }));
 
 // ---------------------------------------------------------------------------
@@ -109,6 +114,51 @@ export const orders = pgTable(
 export const ordersRelations = relations(orders, ({ one }) => ({
   user: one(users, { fields: [orders.userId], references: [users.id] }),
   product: one(products, { fields: [orders.productId], references: [products.id] }),
+}));
+
+// ---------------------------------------------------------------------------
+// oneshot_orders
+// ---------------------------------------------------------------------------
+
+export const oneshotOrders = pgTable(
+  'oneshot_orders',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    productId: uuid('product_id')
+      .notNull()
+      .references(() => products.id, { onDelete: 'cascade' }),
+    /** Nejbližší pondělí pečícího termínu */
+    weekStart: date('week_start').notNull(),
+    // quantity > 0 CHECK enforced via migration SQL (0002_oneshot_prices.sql)
+    // Záměr: nulové oneshot objednávky se mažou (DELETE), nevkládají.
+    quantity: integer('quantity').notNull().default(1),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    /** Aplikační konvence: každý UPDATE musí explicitně předat updatedAt: new Date() */
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    // Upsert klíč – UNIQUE (user_id, product_id, week_start)
+    oneshotOrdersUniqueUserProductWeek: unique('oneshot_orders_user_product_week_key').on(
+      t.userId,
+      t.productId,
+      t.weekStart,
+    ),
+    // Index pro dotaz "oneshot objednávky uživatele v daném týdnu"
+    oneshotOrdersUserWeekIdx: index('oneshot_orders_user_week_idx').on(t.userId, t.weekStart),
+    // Index pro dotaz "všechny oneshot objednávky v týdnu"
+    oneshotOrdersWeekStartIdx: index('oneshot_orders_week_start_idx').on(t.weekStart),
+    // Note: CHECK constraint (quantity > 0) is enforced at the database level via
+    // migration SQL (0002_oneshot_prices.sql), not in Drizzle schema
+    // to maintain compatibility with drizzle-orm 0.30.x.
+  }),
+);
+
+export const oneshotOrdersRelations = relations(oneshotOrders, ({ one }) => ({
+  user: one(users, { fields: [oneshotOrders.userId], references: [users.id] }),
+  product: one(products, { fields: [oneshotOrders.productId], references: [products.id] }),
 }));
 
 // ---------------------------------------------------------------------------
@@ -172,3 +222,5 @@ export type WeekSettings = typeof weekSettings.$inferSelect;
 export type NewWeekSettings = typeof weekSettings.$inferInsert;
 export type EmailLog = typeof emailLogs.$inferSelect;
 export type NewEmailLog = typeof emailLogs.$inferInsert;
+export type OneshotOrder = typeof oneshotOrders.$inferSelect;
+export type NewOneshotOrder = typeof oneshotOrders.$inferInsert;
