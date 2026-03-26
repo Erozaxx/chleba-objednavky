@@ -13,7 +13,7 @@ import { redirect } from 'next/navigation';
 import { db } from '@/lib/db/client';
 import { users, products, orders, weekSettings, oneshotOrders } from '@/lib/db/schema';
 import { eq, and, asc } from 'drizzle-orm';
-import { getWeekStart, isBeforeCutoff, formatDateISO, formatDateCZ, getDeadlineDate, getNextWeekStart } from '@/lib/week/utils';
+import { getWeekStart, isBeforeCutoff, formatDateISO, formatDateCZ, getDeadlineDate, getBakingDate, getNextWeekStart } from '@/lib/week/utils';
 import CustomerOrderPage from '@/components/customer/CustomerOrderPage';
 import type { Product, ExistingOrder } from '@/components/customer/OrderForm';
 import type { OneshotProduct, InitialOneshotOrder } from '@/components/customer/OneshotSection';
@@ -39,16 +39,31 @@ export default async function CustomerPage({ params }: { params: { token: string
     redirect('/not-found');
   }
 
-  // Current week
-  const weekStart = getWeekStart();
-  const weekStartISO = formatDateISO(weekStart);
+  // Determine effective week: after baking day ends, switch to next week
+  const now = new Date();
+  const currentWeekStart = getWeekStart(now);
+  const currentWeekISO = formatDateISO(currentWeekStart);
 
-  // Fetch week settings for current week (if any)
-  const [ws] = await db
+  // Fetch current week settings to get bakingDay (needed for week-switch decision)
+  const [currentWs] = await db
     .select()
     .from(weekSettings)
-    .where(eq(weekSettings.weekStart, weekStartISO))
+    .where(eq(weekSettings.weekStart, currentWeekISO))
     .limit(1);
+  const currentBakingDay = currentWs?.bakingDay ?? 5;
+
+  // After baking day ends (23:59) → show next week so weekend orders are possible
+  const bakingDate = getBakingDate(currentWeekStart, currentBakingDay);
+  const endOfBakingDay = new Date(bakingDate);
+  endOfBakingDay.setHours(23, 59, 59, 999);
+
+  const weekStart = now > endOfBakingDay ? getNextWeekStart(currentWeekStart) : currentWeekStart;
+  const weekStartISO = formatDateISO(weekStart);
+
+  // Fetch effective week settings (next week may differ from current)
+  const [ws] = weekStartISO === currentWeekISO
+    ? [currentWs]
+    : await db.select().from(weekSettings).where(eq(weekSettings.weekStart, weekStartISO)).limit(1);
 
   const bakingDay = ws?.bakingDay ?? 5; // default Friday
   const isClosed = ws?.closed ?? false;
