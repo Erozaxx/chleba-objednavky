@@ -45,6 +45,20 @@ export async function PATCH(request: NextRequest, { params }: RouteParams): Prom
       updateData.sortOrder = body.sortOrder;
     }
 
+    if (body.priceKc !== undefined) {
+      if (typeof body.priceKc !== 'number' || !Number.isInteger(body.priceKc) || body.priceKc < 0) {
+        return NextResponse.json({ error: 'Cena musí být nezáporné celé číslo (haléře).' }, { status: 400 });
+      }
+      updateData.priceKc = body.priceKc;
+    }
+
+    if (body.oneshotVisible !== undefined) {
+      if (typeof body.oneshotVisible !== 'boolean') {
+        return NextResponse.json({ error: 'oneshotVisible musí být boolean.' }, { status: 400 });
+      }
+      updateData.oneshotVisible = body.oneshotVisible;
+    }
+
     if (Object.keys(updateData).length === 0) {
       return NextResponse.json({ error: 'Žádná data k aktualizaci.' }, { status: 400 });
     }
@@ -66,6 +80,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams): Prom
         description: updated.description,
         active: updated.active,
         sortOrder: updated.sortOrder,
+        priceKc: updated.priceKc,
+        oneshotVisible: updated.oneshotVisible,
       },
     });
   } catch (error) {
