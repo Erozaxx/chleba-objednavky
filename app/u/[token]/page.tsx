@@ -67,11 +67,11 @@ export default async function CustomerPage({ params }: { params: { token: string
   // Fetch active products + oneshot products souběžně (Promise.all)
   const [activeProducts, oneshotProductsRaw, existingOrdersRaw, existingOneshotOrdersRaw] =
     await Promise.all([
-      // Pravidelné produkty
+      // Pravidelné produkty: active=true AND oneshotVisible=false
       db
         .select()
         .from(products)
-        .where(eq(products.active, true))
+        .where(and(eq(products.active, true), eq(products.oneshotVisible, false)))
         .orderBy(asc(products.sortOrder), asc(products.name)),
       // Oneshot katalog: active=true + oneshotVisible=true
       db
