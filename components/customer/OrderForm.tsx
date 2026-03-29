@@ -260,7 +260,10 @@ export default function OrderForm({
             : 'bg-red-50 text-red-700'
         }`}
       >
-        {deadlineInfo}
+        {isEditable && (
+          <div className="font-medium">Pečení: {bakingDateLabel}</div>
+        )}
+        <div>{deadlineInfo}</div>
       </div>
 
       {/* Product list */}

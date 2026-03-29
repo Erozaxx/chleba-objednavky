@@ -13,7 +13,7 @@ import { redirect } from 'next/navigation';
 import { db } from '@/lib/db/client';
 import { users, products, orders, weekSettings, oneshotOrders } from '@/lib/db/schema';
 import { eq, and, asc } from 'drizzle-orm';
-import { getWeekStart, isBeforeCutoff, formatDateISO, formatDateCZ, getDeadlineDate, getBakingDate, getNextWeekStart } from '@/lib/week/utils';
+import { getWeekStart, isBeforeCutoff, formatDateISO, getDeadlineDate, getBakingDate, getNextWeekStart } from '@/lib/week/utils';
 import CustomerOrderPage from '@/components/customer/CustomerOrderPage';
 import type { Product, ExistingOrder } from '@/components/customer/OrderForm';
 import type { OneshotProduct, InitialOneshotOrder } from '@/components/customer/OneshotSection';
@@ -66,7 +66,7 @@ export default async function CustomerPage({ params }: { params: { token: string
   const bakingDay = ws?.bakingDay ?? 5; // default Friday
   const isClosed = ws?.closed ?? false;
 
-  // Baking date label for display in OrderForm
+  // Baking date label for display in OrderForm header
   const effectiveBakingDate = getBakingDate(weekStart, bakingDay);
   const bakingDateLabel = effectiveBakingDate.toLocaleDateString('cs-CZ', {
     weekday: 'long', day: 'numeric', month: 'long',
@@ -77,11 +77,14 @@ export default async function CustomerPage({ params }: { params: { token: string
 
   // Deadline date = den před pečením v 17:00
   const deadlineDate = getDeadlineDate(weekStart, bakingDay);
+  const deadlineDateLabel = deadlineDate.toLocaleDateString('cs-CZ', {
+    weekday: 'long', day: 'numeric', month: 'long',
+  });
   const deadlineInfo = isClosed
     ? 'Tento týden je uzavřen pro objednávky.'
     : editable
-      ? `Pečení ${bakingDateLabel} — objednávky do ${formatDateCZ(deadlineDate)} 17:00.`
-      : `Uzávěrka proběhla ${formatDateCZ(deadlineDate)} 17:00 – objednávky jsou uzamčeny.`;
+      ? `Objednávky do ${deadlineDateLabel} 17:00.`
+      : `Uzávěrka proběhla ${deadlineDateLabel} 17:00 – objednávky jsou uzamčeny.`;
 
   // Fetch active products + oneshot products souběžně (Promise.all)
   const [activeProducts, oneshotProductsRaw, existingOrdersRaw, existingOneshotOrdersRaw] =
@@ -161,33 +164,14 @@ export default async function CustomerPage({ params }: { params: { token: string
           oneshotProducts={oneshotProductData}
           initialOneshotOrders={initialOneshotOrders}
         />
-        {/* Next week skip control */}
-        {(async () => {
-          const nextWeek = getNextWeekStart(weekStart, 1);
-          const nextWeekISO = formatDateISO(nextWeek);
-          const weekAfterNext = getNextWeekStart(weekStart, 2);
-          const weekAfterNextISO = formatDateISO(weekAfterNext);
-          // Fetch next week settings to get bakingDay (may differ from current week)
-          const [nextWs] = await db
-            .select()
-            .from(weekSettings)
-            .where(eq(weekSettings.weekStart, nextWeekISO))
-            .limit(1);
-          const nextBakingDay = nextWs?.bakingDay ?? 5;
-          const nextBakingDate = getBakingDate(nextWeek, nextBakingDay);
-          const nextWeekLabel = nextBakingDate.toLocaleDateString('cs-CZ', {
-            weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
-          });
-          return (
-            <SkipWeekButton
-              nextWeekStart={nextWeekISO}
-              nextWeekLabel={nextWeekLabel}
-              weekAfterNext={weekAfterNextISO}
-              currentSkipUntil={user.skipUntil ?? null}
-              customerToken={token}
-            />
-          );
-        })()}
+        {/* Next baking skip control – targets the current ordering week (upcoming baking) */}
+        <SkipWeekButton
+          nextWeekStart={weekStartISO}
+          nextWeekLabel={bakingDateLabel}
+          weekAfterNext={formatDateISO(getNextWeekStart(weekStart, 1))}
+          currentSkipUntil={user.skipUntil ?? null}
+          customerToken={token}
+        />
       </div>
     </main>
   );
