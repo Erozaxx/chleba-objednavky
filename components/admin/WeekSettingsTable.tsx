@@ -28,12 +28,14 @@ interface WeekRow {
 interface WeekSettingsTableProps {
   weeks: WeekRow[];
   currentWeekStart: string;
+  nextWeekStart: string;
   adminToken: string;
 }
 
 export default function WeekSettingsTable({
   weeks: initialWeeks,
   currentWeekStart,
+  nextWeekStart,
   adminToken,
 }: WeekSettingsTableProps) {
   const [weeks, setWeeks] = useState<WeekRow[]>(initialWeeks);
@@ -116,6 +118,43 @@ export default function WeekSettingsTable({
             </tr>
           </thead>
           <tbody>
+            {/* Always show next week even if no settings exist */}
+            {!weeks.find((w) => w.weekStart === nextWeekStart) && (
+              <tr className="border-b border-dough-200">
+                <td className="px-3 py-3 font-medium text-bread-900">
+                  {nextWeekStart}
+                  <span className="ml-2 text-xs text-bread-500">(příští)</span>
+                </td>
+                <td className="px-3 py-3 text-center">
+                  <select
+                    defaultValue={5}
+                    onChange={(e) =>
+                      handleChangeBakingDay(nextWeekStart, Number(e.target.value))
+                    }
+                    className="border border-bread-300 rounded px-2 py-1 text-sm"
+                  >
+                    {Object.entries(DAY_NAMES).map(([val, label]) => (
+                      <option key={val} value={val}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </td>
+                <td className="px-3 py-3 text-center">
+                  <span className="inline-block px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">
+                    Otevřený
+                  </span>
+                </td>
+                <td className="px-3 py-3 text-right">
+                  <button
+                    onClick={() => handleToggleClosed(nextWeekStart, false)}
+                    className="px-2 py-1 text-xs bg-red-100 hover:bg-red-200 text-red-700 rounded"
+                  >
+                    Uzavřít
+                  </button>
+                </td>
+              </tr>
+            )}
             {/* Always show current week even if no settings exist */}
             {!weeks.find((w) => w.weekStart === currentWeekStart) && (
               <tr className="border-b border-dough-200 bg-bread-50/50">
@@ -164,6 +203,9 @@ export default function WeekSettingsTable({
                   {week.weekStart}
                   {week.weekStart === currentWeekStart && (
                     <span className="ml-2 text-xs text-bread-500">(aktuální)</span>
+                  )}
+                  {week.weekStart === nextWeekStart && (
+                    <span className="ml-2 text-xs text-bread-500">(příští)</span>
                   )}
                 </td>
                 <td className="px-3 py-3 text-center">

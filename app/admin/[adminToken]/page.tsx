@@ -78,6 +78,7 @@ export default async function AdminPage({ params }: AdminPageProps) {
       quantity: orders.quantity,
       priceKc: products.priceKc,
       weekStart: orders.weekStart,
+      isTemporary: orders.isTemporary,
     })
     .from(orders)
     .innerJoin(users, eq(orders.userId, users.id))
@@ -107,7 +108,10 @@ export default async function AdminPage({ params }: AdminPageProps) {
     .where(inArray(oneshotOrders.weekStart, [weekStartISO, nextWeekStartISO]))
     .orderBy(asc(users.name), asc(products.sortOrder), asc(products.name));
 
-  const allOrderRows = [...regularOrderRows, ...oneshotOrderRows];
+  const allOrderRows = [
+    ...regularOrderRows.map((r) => ({ ...r, isOneshot: false })),
+    ...oneshotOrderRows.map((r) => ({ ...r, isTemporary: false, isOneshot: true })),
+  ];
 
   const currentWeekOrderRows = allOrderRows
     .filter((r) => r.weekStart === weekStartISO)
@@ -216,6 +220,7 @@ export default async function AdminPage({ params }: AdminPageProps) {
               closedReason: w.closedReason,
             }))}
             currentWeekStart={weekStartISO}
+            nextWeekStart={nextWeekStartISO}
             adminToken={adminToken}
           />
         </section>
