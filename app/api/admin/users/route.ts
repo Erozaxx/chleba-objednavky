@@ -23,6 +23,7 @@ export async function GET(): Promise<NextResponse> {
         id: u.id,
         name: u.name,
         email: u.email,
+        phone: u.phone,
         token: u.token,
         active: u.active,
         skipUntil: u.skipUntil,
@@ -38,14 +39,14 @@ export async function GET(): Promise<NextResponse> {
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     const body = await request.json();
-    const { name, email } = body;
+    const { name, email, phone } = body;
 
     if (!name || typeof name !== 'string' || !name.trim()) {
       return NextResponse.json({ error: 'Jméno je povinné.' }, { status: 400 });
     }
-    if (!email || typeof email !== 'string' || !email.trim()) {
-      return NextResponse.json({ error: 'Email je povinný.' }, { status: 400 });
-    }
+
+    const emailValue = email && typeof email === 'string' && email.trim() ? email.trim() : null;
+    const phoneValue = phone && typeof phone === 'string' && phone.trim() ? phone.trim() : null;
 
     // Generate 32-byte hex token (256 bits entropy)
     const token = randomBytes(32).toString('hex');
@@ -54,7 +55,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       .insert(users)
       .values({
         name: name.trim(),
-        email: email.trim(),
+        email: emailValue,
+        phone: phoneValue,
         token,
       })
       .returning();
@@ -64,6 +66,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         id: newUser.id,
         name: newUser.name,
         email: newUser.email,
+        phone: newUser.phone,
         token: newUser.token,
         active: newUser.active,
         skipUntil: newUser.skipUntil,

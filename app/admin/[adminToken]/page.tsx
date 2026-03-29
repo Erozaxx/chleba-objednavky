@@ -8,7 +8,7 @@
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { db } from '@/lib/db/client';
-import { users, products, weekSettings, orders } from '@/lib/db/schema';
+import { users, products, weekSettings, orders, oneshotOrders } from '@/lib/db/schema';
 import { eq, desc, asc, and, gte, inArray, sql } from 'drizzle-orm';
 import { getWeekStart, getNextWeekStart, formatDateISO } from '@/lib/week/utils';
 import UserTable from '@/components/admin/UserTable';
@@ -68,8 +68,8 @@ export default async function AdminPage({ params }: AdminPageProps) {
   const orderCount = Number(currentWeekOrdersCount[0]?.count ?? 0);
   const activeUsersCount = allUsers.filter((u) => u.active).length;
 
-  // Orders detail for current + next week (join users + products)
-  const orderRows = await db
+  // Regular orders for current + next week (join users + products)
+  const regularOrderRows = await db
     .select({
       userId: users.id,
       userName: users.name,
@@ -90,11 +90,30 @@ export default async function AdminPage({ params }: AdminPageProps) {
     )
     .orderBy(asc(users.name), asc(products.sortOrder), asc(products.name));
 
-  const currentWeekOrderRows = orderRows
+  // Oneshot orders for current + next week
+  const oneshotOrderRows = await db
+    .select({
+      userId: users.id,
+      userName: users.name,
+      productId: products.id,
+      productName: products.name,
+      quantity: oneshotOrders.quantity,
+      priceKc: products.priceKc,
+      weekStart: oneshotOrders.weekStart,
+    })
+    .from(oneshotOrders)
+    .innerJoin(users, eq(oneshotOrders.userId, users.id))
+    .innerJoin(products, eq(oneshotOrders.productId, products.id))
+    .where(inArray(oneshotOrders.weekStart, [weekStartISO, nextWeekStartISO]))
+    .orderBy(asc(users.name), asc(products.sortOrder), asc(products.name));
+
+  const allOrderRows = [...regularOrderRows, ...oneshotOrderRows];
+
+  const currentWeekOrderRows = allOrderRows
     .filter((r) => r.weekStart === weekStartISO)
     .map(({ weekStart: _w, ...r }) => r);
 
-  const nextWeekOrderRows = orderRows
+  const nextWeekOrderRows = allOrderRows
     .filter((r) => r.weekStart === nextWeekStartISO)
     .map(({ weekStart: _w, ...r }) => r);
 
@@ -147,6 +166,7 @@ export default async function AdminPage({ params }: AdminPageProps) {
               id: u.id,
               name: u.name,
               email: u.email,
+              phone: u.phone,
               token: u.token,
               active: u.active,
               skipUntil: u.skipUntil,
