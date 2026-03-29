@@ -173,6 +173,12 @@ export default async function AdminPage({ params }: AdminPageProps) {
               createdAt: u.createdAt.toISOString(),
             }))}
             adminToken={adminToken}
+            products={allProducts.filter(p => p.active).map(p => ({
+              id: p.id,
+              name: p.name,
+              sortOrder: p.sortOrder,
+            }))}
+            nextWeekStart={nextWeekStartISO}
           />
         </section>
 

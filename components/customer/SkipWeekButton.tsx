@@ -109,7 +109,7 @@ export default function SkipWeekButton({
   return (
     <div className="mt-4 p-4 rounded-xl border border-dough-200 bg-white">
       <p className="text-sm font-medium text-bread-800 mb-2">
-        Příští týden: {nextWeekLabel}
+        Příští pečení: {nextWeekLabel}
       </p>
 
       {skipWeeks === 0 && (
