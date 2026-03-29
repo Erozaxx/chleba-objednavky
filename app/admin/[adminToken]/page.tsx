@@ -9,11 +9,12 @@ import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { db } from '@/lib/db/client';
 import { users, products, weekSettings, orders } from '@/lib/db/schema';
-import { eq, desc, asc, and, gte, sql } from 'drizzle-orm';
-import { getWeekStart, formatDateISO } from '@/lib/week/utils';
+import { eq, desc, asc, and, gte, inArray, sql } from 'drizzle-orm';
+import { getWeekStart, getNextWeekStart, formatDateISO } from '@/lib/week/utils';
 import UserTable from '@/components/admin/UserTable';
 import ProductTable from '@/components/admin/ProductTable';
 import WeekSettingsTable from '@/components/admin/WeekSettingsTable';
+import OrdersOverview from '@/components/admin/OrdersOverview';
 
 interface AdminPageProps {
   params: { adminToken: string };
@@ -53,15 +54,49 @@ export default async function AdminPage({ params }: AdminPageProps) {
     .where(gte(weekSettings.weekStart, eightWeeksAgoISO))
     .orderBy(desc(weekSettings.weekStart));
 
-  // Current week orders count for dashboard
+  // Current and next week ISO strings
   const weekStartISO = formatDateISO(weekStart);
-  const currentWeekOrders = await db
+  const nextWeekStart = getNextWeekStart(weekStart, 1);
+  const nextWeekStartISO = formatDateISO(nextWeekStart);
+
+  // Orders count for stats card (current week)
+  const currentWeekOrdersCount = await db
     .select({ count: sql<number>`count(*)` })
     .from(orders)
     .where(and(eq(orders.weekStart, weekStartISO), sql`${orders.quantity} > 0`));
 
-  const orderCount = Number(currentWeekOrders[0]?.count ?? 0);
+  const orderCount = Number(currentWeekOrdersCount[0]?.count ?? 0);
   const activeUsersCount = allUsers.filter((u) => u.active).length;
+
+  // Orders detail for current + next week (join users + products)
+  const orderRows = await db
+    .select({
+      userId: users.id,
+      userName: users.name,
+      productId: products.id,
+      productName: products.name,
+      quantity: orders.quantity,
+      priceKc: products.priceKc,
+      weekStart: orders.weekStart,
+    })
+    .from(orders)
+    .innerJoin(users, eq(orders.userId, users.id))
+    .innerJoin(products, eq(orders.productId, products.id))
+    .where(
+      and(
+        inArray(orders.weekStart, [weekStartISO, nextWeekStartISO]),
+        sql`${orders.quantity} > 0`,
+      ),
+    )
+    .orderBy(asc(users.name), asc(products.sortOrder), asc(products.name));
+
+  const currentWeekOrderRows = orderRows
+    .filter((r) => r.weekStart === weekStartISO)
+    .map(({ weekStart: _w, ...r }) => r);
+
+  const nextWeekOrderRows = orderRows
+    .filter((r) => r.weekStart === nextWeekStartISO)
+    .map(({ weekStart: _w, ...r }) => r);
 
   return (
     <main className="min-h-screen bg-dough-100">
@@ -93,6 +128,16 @@ export default async function AdminPage({ params }: AdminPageProps) {
             <div className="text-sm text-gray-500">Aktuální týden</div>
           </div>
         </div>
+
+        {/* Orders overview section */}
+        <section id="orders">
+          <OrdersOverview
+            currentWeekStart={weekStartISO}
+            nextWeekStart={nextWeekStartISO}
+            currentWeekOrders={currentWeekOrderRows}
+            nextWeekOrders={nextWeekOrderRows}
+          />
+        </section>
 
         {/* Users section */}
         <section id="users">
