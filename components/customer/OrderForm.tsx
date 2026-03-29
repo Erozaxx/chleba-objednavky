@@ -43,6 +43,7 @@ interface OrderFormProps {
   weekStart: string;
   isEditable: boolean;
   deadlineInfo: string;
+  bakingDateLabel: string;
   userName: string;
   customerToken: string;
   /** Callback volaný při každé změně qty – předává součet qty*priceKc v haléřích. */
@@ -71,6 +72,7 @@ export default function OrderForm({
   weekStart,
   isEditable,
   deadlineInfo,
+  bakingDateLabel,
   userName,
   customerToken,
   onRegularTotalChange,

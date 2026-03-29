@@ -22,6 +22,7 @@ interface CustomerOrderPageProps {
   weekStart: string;
   isEditable: boolean;
   deadlineInfo: string;
+  bakingDateLabel: string;
   userName: string;
   customerToken: string;
   /** Počáteční celková hodnota objednávky v haléřích, vypočtená na serveru. */
@@ -38,6 +39,7 @@ export default function CustomerOrderPage({
   weekStart,
   isEditable,
   deadlineInfo,
+  bakingDateLabel,
   userName,
   customerToken,
   initialTotal,
@@ -60,6 +62,7 @@ export default function CustomerOrderPage({
         weekStart={weekStart}
         isEditable={isEditable}
         deadlineInfo={deadlineInfo}
+        bakingDateLabel={bakingDateLabel}
         userName={userName}
         customerToken={customerToken}
         onRegularTotalChange={setRegularTotal}

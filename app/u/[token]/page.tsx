@@ -52,12 +52,10 @@ export default async function CustomerPage({ params }: { params: { token: string
     .limit(1);
   const currentBakingDay = currentWs?.bakingDay ?? 5;
 
-  // After baking day ends (23:59) → show next week so weekend orders are possible
-  const bakingDate = getBakingDate(currentWeekStart, currentBakingDay);
-  const endOfBakingDay = new Date(bakingDate);
-  endOfBakingDay.setHours(23, 59, 59, 999);
-
-  const weekStart = now > endOfBakingDay ? getNextWeekStart(currentWeekStart) : currentWeekStart;
+  // After deadline passes (day before baking at 17:00) → switch to next baking week
+  // This means: order is always for the closest upcoming baking
+  const currentDeadlinePassed = !isBeforeCutoff(currentWeekStart, currentBakingDay, 17, now);
+  const weekStart = currentDeadlinePassed ? getNextWeekStart(currentWeekStart) : currentWeekStart;
   const weekStartISO = formatDateISO(weekStart);
 
   // Fetch effective week settings (next week may differ from current)
@@ -68,6 +66,12 @@ export default async function CustomerPage({ params }: { params: { token: string
   const bakingDay = ws?.bakingDay ?? 5; // default Friday
   const isClosed = ws?.closed ?? false;
 
+  // Baking date label for display in OrderForm
+  const effectiveBakingDate = getBakingDate(weekStart, bakingDay);
+  const bakingDateLabel = effectiveBakingDate.toLocaleDateString('cs-CZ', {
+    weekday: 'long', day: 'numeric', month: 'long',
+  });
+
   // Check if before cutoff
   const editable = !isClosed && isBeforeCutoff(weekStart, bakingDay);
 
@@ -76,7 +80,7 @@ export default async function CustomerPage({ params }: { params: { token: string
   const deadlineInfo = isClosed
     ? 'Tento týden je uzavřen pro objednávky.'
     : editable
-      ? `Objednávky lze měnit do ${formatDateCZ(deadlineDate)} 17:00.`
+      ? `Pečení ${bakingDateLabel} — objednávky do ${formatDateCZ(deadlineDate)} 17:00.`
       : `Uzávěrka proběhla ${formatDateCZ(deadlineDate)} 17:00 – objednávky jsou uzamčeny.`;
 
   // Fetch active products + oneshot products souběžně (Promise.all)
@@ -150,6 +154,7 @@ export default async function CustomerPage({ params }: { params: { token: string
           weekStart={weekStartISO}
           isEditable={editable}
           deadlineInfo={deadlineInfo}
+          bakingDateLabel={bakingDateLabel}
           userName={user.name}
           customerToken={token}
           initialTotal={initialTotal}
