@@ -13,7 +13,7 @@
  * - zobrazeni červeně ve všech záložkách pro příští týden
  */
 
-import { useState } from 'react';
+import React, { useState } from 'react';
 
 export interface OrderRow {
   userId: string;
@@ -22,6 +22,8 @@ export interface OrderRow {
   productName: string;
   quantity: number;
   priceKc: number;
+  isTemporary?: boolean;
+  isOneshot?: boolean;
 }
 
 interface Props {
@@ -53,6 +55,17 @@ export default function OrdersOverview({
   const orders = week === 'current' ? currentWeekOrders : nextWeekOrders;
   const weekLabel = week === 'current' ? currentWeekStart : nextWeekStart;
   const skipped = new Set(week === 'next' ? skippedNextWeekUserIds : []);
+
+  // Uživatelé s nestandardní objednávkou (dočasná nebo jednorázová)
+  const nonStandardUsers = new Set(
+    orders
+      .filter((o) => o.isTemporary || o.isOneshot)
+      .map((o) => o.userId),
+  );
+
+  const nonStandardStyle: React.CSSProperties = {
+    background: 'repeating-linear-gradient(45deg, #f0fdf4, #f0fdf4 3px, transparent 3px, transparent 10px)',
+  };
 
   // Objednávky bez přeskočených uživatelů (pro součty)
   const activeOrders = orders.filter((o) => !skipped.has(o.userId));
@@ -234,10 +247,15 @@ export default function OrdersOverview({
             </thead>
             <tbody className="divide-y divide-dough-100">
               {customerTotals.map((c) => (
-                <tr key={c.id} className={c.skipped ? 'bg-red-50' : ''}>
+                <tr
+                  key={c.id}
+                  className={c.skipped ? 'bg-red-50' : ''}
+                  style={!c.skipped && nonStandardUsers.has(c.id) ? nonStandardStyle : undefined}
+                >
                   <td className={`py-2.5 ${c.skipped ? 'text-red-600' : 'text-gray-800'}`}>
                     {c.name}
                     {c.skipped && <span className="ml-2 text-xs font-medium text-red-400">(přeskočeno)</span>}
+                    {!c.skipped && nonStandardUsers.has(c.id) && <span className="ml-2 text-xs font-medium text-green-600">*</span>}
                   </td>
                   <td className={`py-2.5 text-right ${c.skipped ? 'text-red-400 line-through' : 'text-bread-700'}`}>{c.qty}</td>
                   <td className={`py-2.5 text-right ${c.skipped ? 'text-red-400 line-through' : 'text-gray-600'}`}>{formatKc(c.total)}</td>
@@ -268,16 +286,18 @@ export default function OrdersOverview({
               const userTotal = c.items.reduce((s, i) => s + i.price, 0);
               const userQty = c.items.reduce((s, i) => s + i.qty, 0);
               return (
-                <div key={userId} className={`border rounded-lg overflow-hidden ${c.skipped ? 'border-red-200' : 'border-dough-200'}`}>
+                <div key={userId} className={`border rounded-lg overflow-hidden ${c.skipped ? 'border-red-200' : nonStandardUsers.has(userId) ? 'border-green-200' : 'border-dough-200'}`}>
                   <button
                     onClick={() => toggleExpand(userId)}
                     className={`w-full flex items-center justify-between px-4 py-3 transition-colors text-left ${
                       c.skipped ? 'bg-red-50 hover:bg-red-100' : 'bg-white hover:bg-dough-50'
                     }`}
+                    style={!c.skipped && nonStandardUsers.has(userId) ? nonStandardStyle : undefined}
                   >
                     <span className={`font-medium ${c.skipped ? 'text-red-700' : 'text-gray-800'}`}>
                       {c.name}
                       {c.skipped && <span className="ml-2 text-xs font-normal text-red-400">(přeskočeno)</span>}
+                      {!c.skipped && nonStandardUsers.has(userId) && <span className="ml-2 text-xs font-normal text-green-600">*</span>}
                     </span>
                     <span className="flex items-center gap-3 text-sm">
                       <span className={c.skipped ? 'text-red-400 line-through' : 'text-gray-500'}>{userQty} ks</span>
