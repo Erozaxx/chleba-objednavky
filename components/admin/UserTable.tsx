@@ -156,6 +156,25 @@ export default function UserTable({ users: initialUsers, adminToken, products, n
     }
   };
 
+  const handleDelete = async (userId: string, userName: string) => {
+    if (!confirm(`Opravdu smazat zákazníka „${userName}"? Smažou se i všechny jeho objednávky.`)) return;
+    try {
+      const res = await fetch(`/api/admin/users/${userId}`, {
+        method: 'DELETE',
+        headers: apiHeaders,
+      });
+      if (res.ok) {
+        setUsers((prev) => prev.filter((u) => u.id !== userId));
+        setFeedback(`Zákazník ${userName} byl smazán.`);
+      } else {
+        const data = await res.json();
+        setFeedback(data.error || 'Chyba při mazání.');
+      }
+    } catch {
+      setFeedback('Chyba spojení.');
+    }
+  };
+
   const handleSaveOrder = async () => {
     if (!onboardingUser) return;
     const items = Object.entries(orderDrafts)
@@ -314,6 +333,13 @@ export default function UserTable({ users: initialUsers, adminToken, products, n
                       }`}
                     >
                       {user.active ? 'Deaktivovat' : 'Aktivovat'}
+                    </button>
+                    <button
+                      onClick={() => handleDelete(user.id, user.name)}
+                      className="px-2 py-1 text-xs rounded transition-colors bg-red-600 hover:bg-red-700 text-white"
+                      title="Smazat zákazníka"
+                    >
+                      Smazat
                     </button>
                   </div>
                 </td>
