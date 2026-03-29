@@ -1,0 +1,85 @@
+name: UI Agent
+on:
+  workflow_dispatch:
+    inputs:
+      prompt:
+        description: 'UI change prompt'
+        required: false
+        default: ''
+        type: string
+      action:
+        description: 'Action type (change/rollback)'
+        required: false
+        default: 'change'
+        type: string
+      commit_sha:
+        description: 'Commit SHA for rollback'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ui-agent
+  cancel-in-progress: false
+
+jobs:
+  ui-agent:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GH_PAT }}
+
+      # --- CHANGE flow ---
+      - name: Run UI Agent
+        if: inputs.action == 'change'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CHANGE_PROMPT: ${{ inputs.prompt }}
+        run: node .github/scripts/ui-agent.js
+
+      - name: Build validation
+        if: inputs.action == 'change'
+        run: |
+          npm ci
+          npx tsc --noEmit
+          npm run build
+
+      - name: Commit and push changes
+        if: inputs.action == 'change'
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+          PROMPT: ${{ inputs.prompt }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          git config user.name "UI Agent"
+          git config user.email "ui-agent@noreply.github.com"
+          git add -A
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          PROMPT_SHORT=$(echo "$PROMPT" | head -c 72)
+          git commit -m "[ui-agent: ${RUN_ID}] ${PROMPT_SHORT}"
+          git remote set-url origin "https://x-access-token:${GH_PAT}@github.com/Erozaxx/chleba-objednavky.git"
+          git push origin main
+
+      # --- ROLLBACK flow ---
+      - name: Rollback commit
+        if: inputs.action == 'rollback' && inputs.commit_sha != ''
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+          COMMIT_SHA: ${{ inputs.commit_sha }}
+        run: |
+          git config user.name "UI Agent"
+          git config user.email "ui-agent@noreply.github.com"
+          git remote set-url origin "https://x-access-token:${GH_PAT}@github.com/Erozaxx/chleba-objednavky.git"
+          if ! git revert --no-edit "$COMMIT_SHA"; then
+            echo "::error::Rollback failed - merge conflict. Manual intervention needed."
+            exit 1
+          fi
+          git push origin main
