@@ -23,7 +23,7 @@ import { formatDateCZ } from '../week/utils';
 interface EmailUser {
   id: string;
   name: string;
-  email: string;
+  email: string | null;
 }
 
 interface OrderSummaryItem {
@@ -93,6 +93,9 @@ export async function sendOnboarding(
   user: EmailUser,
   orderUrl: string,
 ): Promise<{ success: boolean; error?: string }> {
+  if (!user.email) {
+    return { success: false, error: 'Uživatel nemá nastavený email.' };
+  }
   const html = htmlWrapper(`
     ${heading('Vítejte v systému objednávek!')}
     <p style="color:#643818;font-size:15px;line-height:1.6;">
@@ -139,6 +142,7 @@ export async function sendReminder(
   const formattedWeek = formatDateCZ(weekDate);
 
   for (const user of users) {
+    if (!user.email) continue;
     const html = htmlWrapper(`
       ${heading('Týdenní objednávka')}
       <p style="color:#643818;font-size:15px;line-height:1.6;">
@@ -183,6 +187,7 @@ export async function sendBakingEve(
   const formattedBaking = formatDateCZ(bakingDate);
 
   for (const user of users) {
+    if (!user.email) continue;
     const html = htmlWrapper(`
       ${heading('Zítra se peče!')}
       <p style="color:#643818;font-size:15px;line-height:1.6;">

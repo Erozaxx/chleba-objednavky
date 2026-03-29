@@ -166,6 +166,7 @@ export default async function AdminPage({ params }: AdminPageProps) {
               id: u.id,
               name: u.name,
               email: u.email,
+              phone: u.phone,
               token: u.token,
               active: u.active,
               skipUntil: u.skipUntil,

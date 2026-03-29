@@ -1,7 +1,7 @@
 /**
  * app/api/admin/users/[id]/route.ts
  *
- * PATCH: update uživatele (jméno, email, active, skipUntil)
+ * PATCH: update uživatele (jméno, email, phone, active, skipUntil)
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -28,10 +28,18 @@ export async function PATCH(request: NextRequest, { params }: RouteParams): Prom
     }
 
     if (body.email !== undefined) {
-      if (typeof body.email !== 'string' || !body.email.trim()) {
-        return NextResponse.json({ error: 'Email nesmí být prázdný.' }, { status: 400 });
-      }
-      updateData.email = body.email.trim();
+      // null nebo prázdný string = smazat email
+      updateData.email =
+        body.email && typeof body.email === 'string' && body.email.trim()
+          ? body.email.trim()
+          : null;
+    }
+
+    if (body.phone !== undefined) {
+      updateData.phone =
+        body.phone && typeof body.phone === 'string' && body.phone.trim()
+          ? body.phone.trim()
+          : null;
     }
 
     if (body.active !== undefined) {
@@ -67,6 +75,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams): Prom
         id: updated.id,
         name: updated.name,
         email: updated.email,
+        phone: updated.phone,
         token: updated.token,
         active: updated.active,
         skipUntil: updated.skipUntil,

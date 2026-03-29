@@ -38,6 +38,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: 'Uživatel nenalezen.' }, { status: 404 });
     }
 
+    if (!user.email) {
+      return NextResponse.json(
+        { error: 'Uživatel nemá nastavený email, nelze odeslat.' },
+        { status: 400 },
+      );
+    }
+
     // Build order URL
     const origin = request.headers.get('origin') || request.nextUrl.origin;
     const orderUrl = `${origin}/u/${user.token}`;

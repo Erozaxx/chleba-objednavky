@@ -12,7 +12,8 @@ import { useState } from 'react';
 interface UserRow {
   id: string;
   name: string;
-  email: string;
+  email: string | null;
+  phone: string | null;
   token: string;
   active: boolean;
   skipUntil: string | null;
@@ -29,6 +30,7 @@ export default function UserTable({ users: initialUsers, adminToken }: UserTable
   const [showAddForm, setShowAddForm] = useState(false);
   const [newName, setNewName] = useState('');
   const [newEmail, setNewEmail] = useState('');
+  const [newPhone, setNewPhone] = useState('');
   const [feedback, setFeedback] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -106,8 +108,8 @@ export default function UserTable({ users: initialUsers, adminToken }: UserTable
   };
 
   const handleAddUser = async () => {
-    if (!newName.trim() || !newEmail.trim()) {
-      setFeedback('Vyplňte jméno a email.');
+    if (!newName.trim()) {
+      setFeedback('Vyplňte jméno.');
       return;
     }
     setLoading(true);
@@ -115,13 +117,18 @@ export default function UserTable({ users: initialUsers, adminToken }: UserTable
       const res = await fetch('/api/admin/users', {
         method: 'POST',
         headers: apiHeaders,
-        body: JSON.stringify({ name: newName.trim(), email: newEmail.trim() }),
+        body: JSON.stringify({
+          name: newName.trim(),
+          email: newEmail.trim() || null,
+          phone: newPhone.trim() || null,
+        }),
       });
       const data = await res.json();
       if (res.ok) {
         setUsers((prev) => [...prev, data.user]);
         setNewName('');
         setNewEmail('');
+        setNewPhone('');
         setShowAddForm(false);
         setFeedback('Zákazník vytvořen.');
       } else {
@@ -153,19 +160,26 @@ export default function UserTable({ users: initialUsers, adminToken }: UserTable
         </button>
       ) : (
         <div className="card space-y-3">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <input
               type="text"
-              placeholder="Jméno"
+              placeholder="Jméno *"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               className="border border-dough-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-bread-400"
             />
             <input
               type="email"
-              placeholder="Email"
+              placeholder="Email (volitelný)"
               value={newEmail}
               onChange={(e) => setNewEmail(e.target.value)}
+              className="border border-dough-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-bread-400"
+            />
+            <input
+              type="tel"
+              placeholder="Telefon (volitelný)"
+              value={newPhone}
+              onChange={(e) => setNewPhone(e.target.value)}
               className="border border-dough-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-bread-400"
             />
           </div>
@@ -178,6 +192,7 @@ export default function UserTable({ users: initialUsers, adminToken }: UserTable
                 setShowAddForm(false);
                 setNewName('');
                 setNewEmail('');
+                setNewPhone('');
               }}
               className="btn-secondary text-sm"
             >
@@ -194,6 +209,7 @@ export default function UserTable({ users: initialUsers, adminToken }: UserTable
             <tr className="bg-bread-50 text-bread-800">
               <th className="text-left px-3 py-2 font-semibold">Jméno</th>
               <th className="text-left px-3 py-2 font-semibold">Email</th>
+              <th className="text-left px-3 py-2 font-semibold">Telefon</th>
               <th className="text-center px-3 py-2 font-semibold">Stav</th>
               <th className="text-right px-3 py-2 font-semibold">Akce</th>
             </tr>
@@ -202,7 +218,12 @@ export default function UserTable({ users: initialUsers, adminToken }: UserTable
             {users.map((user) => (
               <tr key={user.id} className="border-b border-dough-200 hover:bg-dough-50">
                 <td className="px-3 py-3 font-medium text-bread-900">{user.name}</td>
-                <td className="px-3 py-3 text-gray-600">{user.email}</td>
+                <td className="px-3 py-3 text-gray-600">
+                  {user.email ?? <span className="text-gray-300 italic">–</span>}
+                </td>
+                <td className="px-3 py-3 text-gray-600">
+                  {user.phone ?? <span className="text-gray-300 italic">–</span>}
+                </td>
                 <td className="px-3 py-3 text-center">
                   <span
                     className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
@@ -225,8 +246,9 @@ export default function UserTable({ users: initialUsers, adminToken }: UserTable
                     </button>
                     <button
                       onClick={() => handleSendOnboarding(user.id)}
-                      className="px-2 py-1 text-xs bg-bread-100 hover:bg-bread-200 rounded transition-colors"
-                      title="Odeslat onboarding email"
+                      disabled={!user.email}
+                      className="px-2 py-1 text-xs bg-bread-100 hover:bg-bread-200 rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                      title={user.email ? 'Odeslat onboarding email' : 'Uživatel nemá email'}
                     >
                       Email
                     </button>

@@ -30,7 +30,8 @@ export const users = pgTable(
   {
     id: uuid('id').primaryKey().defaultRandom(),
     name: text('name').notNull(),
-    email: text('email').notNull().unique(),
+    email: text('email').unique(),
+    phone: text('phone'),
     token: text('token').notNull().unique(),
     active: boolean('active').notNull().default(true),
     /** NULL = žádný skip; DATE = přeskočit týdny do tohoto data (R-004) */
