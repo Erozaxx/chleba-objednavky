@@ -43,6 +43,7 @@ interface OrderFormProps {
   weekStart: string;
   isEditable: boolean;
   deadlineInfo: string;
+  bakingDateLabel: string;
   userName: string;
   customerToken: string;
   /** Callback volaný při každé změně qty – předává součet qty*priceKc v haléřích. */
@@ -71,6 +72,7 @@ export default function OrderForm({
   weekStart,
   isEditable,
   deadlineInfo,
+  bakingDateLabel,
   userName,
   customerToken,
   onRegularTotalChange,
@@ -247,6 +249,9 @@ export default function OrderForm({
         </h1>
         <p className="text-bread-600 mt-1">
           {userName}
+        </p>
+        <p className="text-sm font-medium text-bread-700 mt-1">
+          Pečení: {bakingDateLabel}
         </p>
       </div>
 
