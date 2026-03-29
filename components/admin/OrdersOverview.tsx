@@ -8,7 +8,9 @@
  * 2. Zákazníci + cena (seznam lidí s celkovou cenou)
  * 3. Detail (per-osoba, rozbalovatelný)
  *
- * Zobrazuje data pro aktuální nebo příští týden.
+ * Přeskočení uživatelé (skipUntil >= příští týden) jsou:
+ * - vyloučeni ze součtů produktů a celkových sum
+ * - zobrazeni červeně ve všech záložkách pro příští týden
  */
 
 import { useState } from 'react';
@@ -19,7 +21,7 @@ export interface OrderRow {
   productId: string;
   productName: string;
   quantity: number;
-  priceKc: number; // cena za 1 ks v haléřích (3500 = 35 Kč)
+  priceKc: number;
 }
 
 interface Props {
@@ -27,6 +29,8 @@ interface Props {
   nextWeekStart: string;
   currentWeekOrders: OrderRow[];
   nextWeekOrders: OrderRow[];
+  /** userId zákazníků, kteří mají příští týden přeskočen */
+  skippedNextWeekUserIds: string[];
 }
 
 type Tab = 'products' | 'customers' | 'detail';
@@ -40,6 +44,7 @@ export default function OrdersOverview({
   nextWeekStart,
   currentWeekOrders,
   nextWeekOrders,
+  skippedNextWeekUserIds,
 }: Props) {
   const [week, setWeek] = useState<'current' | 'next'>('next');
   const [tab, setTab] = useState<Tab>('products');
@@ -47,10 +52,14 @@ export default function OrdersOverview({
 
   const orders = week === 'current' ? currentWeekOrders : nextWeekOrders;
   const weekLabel = week === 'current' ? currentWeekStart : nextWeekStart;
+  const skipped = new Set(week === 'next' ? skippedNextWeekUserIds : []);
 
-  // ---- Součet produktů ----
+  // Objednávky bez přeskočených uživatelů (pro součty)
+  const activeOrders = orders.filter((o) => !skipped.has(o.userId));
+
+  // ---- Součet produktů (jen aktivní uživatelé) ----
   const productTotals = Object.values(
-    orders.reduce<Record<string, { name: string; qty: number; total: number }>>((acc, o) => {
+    activeOrders.reduce<Record<string, { name: string; qty: number; total: number }>>((acc, o) => {
       if (!acc[o.productId]) acc[o.productId] = { name: o.productName, qty: 0, total: 0 };
       acc[o.productId].qty += o.quantity;
       acc[o.productId].total += o.quantity * o.priceKc;
@@ -58,21 +67,25 @@ export default function OrdersOverview({
     }, {}),
   ).sort((a, b) => a.name.localeCompare(b.name, 'cs'));
 
-  // ---- Součet zákazníků ----
+  // ---- Součet zákazníků (všichni, skipped označeni) ----
   const customerTotals = Object.values(
-    orders.reduce<Record<string, { name: string; qty: number; total: number }>>((acc, o) => {
-      if (!acc[o.userId]) acc[o.userId] = { name: o.userName, qty: 0, total: 0 };
+    orders.reduce<Record<string, { id: string; name: string; qty: number; total: number; skipped: boolean }>>((acc, o) => {
+      if (!acc[o.userId]) acc[o.userId] = { id: o.userId, name: o.userName, qty: 0, total: 0, skipped: skipped.has(o.userId) };
       acc[o.userId].qty += o.quantity;
       acc[o.userId].total += o.quantity * o.priceKc;
       return acc;
     }, {}),
-  ).sort((a, b) => a.name.localeCompare(b.name, 'cs'));
+  ).sort((a, b) => {
+    // Přeskočení na konec
+    if (a.skipped !== b.skipped) return a.skipped ? 1 : -1;
+    return a.name.localeCompare(b.name, 'cs');
+  });
 
   // ---- Detail per zákazník ----
   const customerDetail = orders.reduce<
-    Record<string, { name: string; items: { product: string; qty: number; price: number }[] }>
+    Record<string, { name: string; skipped: boolean; items: { product: string; qty: number; price: number }[] }>
   >((acc, o) => {
-    if (!acc[o.userId]) acc[o.userId] = { name: o.userName, items: [] };
+    if (!acc[o.userId]) acc[o.userId] = { name: o.userName, skipped: skipped.has(o.userId), items: [] };
     acc[o.userId].items.push({ product: o.productName, qty: o.quantity, price: o.quantity * o.priceKc });
     return acc;
   }, {});
@@ -86,8 +99,10 @@ export default function OrdersOverview({
     });
   };
 
-  const totalQty = orders.reduce((s, o) => s + o.quantity, 0);
-  const totalPrice = orders.reduce((s, o) => s + o.quantity * o.priceKc, 0);
+  const activeTotalQty = activeOrders.reduce((s, o) => s + o.quantity, 0);
+  const activeTotalPrice = activeOrders.reduce((s, o) => s + o.quantity * o.priceKc, 0);
+  const activeUserCount = new Set(activeOrders.map((o) => o.userId)).size;
+  const skippedCount = skipped.size;
 
   const tabs: { key: Tab; label: string }[] = [
     { key: 'products', label: 'Součet produktů' },
@@ -128,16 +143,21 @@ export default function OrdersOverview({
 
       {/* Summary bar */}
       {orders.length > 0 && (
-        <div className="flex gap-4 text-sm text-gray-500">
+        <div className="flex flex-wrap gap-4 text-sm text-gray-500">
           <span>
-            <strong className="text-bread-700">{orders.filter((o, i, a) => a.findIndex(x => x.userId === o.userId) === i).length}</strong> zákazníků
+            <strong className="text-bread-700">{activeUserCount}</strong> zákazníků
           </span>
           <span>
-            <strong className="text-bread-700">{totalQty}</strong> ks celkem
+            <strong className="text-bread-700">{activeTotalQty}</strong> ks celkem
           </span>
           <span>
-            <strong className="text-bread-700">{formatKc(totalPrice)}</strong> celkem
+            <strong className="text-bread-700">{formatKc(activeTotalPrice)}</strong> celkem
           </span>
+          {skippedCount > 0 && (
+            <span className="text-red-500">
+              <strong>{skippedCount}</strong> přeskočeno
+            </span>
+          )}
         </div>
       )}
 
@@ -170,6 +190,9 @@ export default function OrdersOverview({
       {/* Tab: Součet produktů */}
       {tab === 'products' && orders.length > 0 && (
         <div className="overflow-x-auto">
+          {skippedCount > 0 && (
+            <p className="text-xs text-red-500 mb-2">Součty nezahrnují přeskočené zákazníky.</p>
+          )}
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-gray-500 border-b border-dough-200">
@@ -190,8 +213,8 @@ export default function OrdersOverview({
             <tfoot>
               <tr className="border-t-2 border-dough-200 font-semibold">
                 <td className="pt-2.5 text-gray-700">Celkem</td>
-                <td className="pt-2.5 text-right text-bread-700">{totalQty}</td>
-                <td className="pt-2.5 text-right text-gray-700">{formatKc(totalPrice)}</td>
+                <td className="pt-2.5 text-right text-bread-700">{activeTotalQty}</td>
+                <td className="pt-2.5 text-right text-gray-700">{formatKc(activeTotalPrice)}</td>
               </tr>
             </tfoot>
           </table>
@@ -211,18 +234,21 @@ export default function OrdersOverview({
             </thead>
             <tbody className="divide-y divide-dough-100">
               {customerTotals.map((c) => (
-                <tr key={c.name}>
-                  <td className="py-2.5 text-gray-800">{c.name}</td>
-                  <td className="py-2.5 text-right text-bread-700">{c.qty}</td>
-                  <td className="py-2.5 text-right text-gray-600">{formatKc(c.total)}</td>
+                <tr key={c.id} className={c.skipped ? 'bg-red-50' : ''}>
+                  <td className={`py-2.5 ${c.skipped ? 'text-red-600' : 'text-gray-800'}`}>
+                    {c.name}
+                    {c.skipped && <span className="ml-2 text-xs font-medium text-red-400">(přeskočeno)</span>}
+                  </td>
+                  <td className={`py-2.5 text-right ${c.skipped ? 'text-red-400 line-through' : 'text-bread-700'}`}>{c.qty}</td>
+                  <td className={`py-2.5 text-right ${c.skipped ? 'text-red-400 line-through' : 'text-gray-600'}`}>{formatKc(c.total)}</td>
                 </tr>
               ))}
             </tbody>
             <tfoot>
               <tr className="border-t-2 border-dough-200 font-semibold">
-                <td className="pt-2.5 text-gray-700">Celkem</td>
-                <td className="pt-2.5 text-right text-bread-700">{totalQty}</td>
-                <td className="pt-2.5 text-right text-gray-700">{formatKc(totalPrice)}</td>
+                <td className="pt-2.5 text-gray-700">Celkem (bez přeskočených)</td>
+                <td className="pt-2.5 text-right text-bread-700">{activeTotalQty}</td>
+                <td className="pt-2.5 text-right text-gray-700">{formatKc(activeTotalPrice)}</td>
               </tr>
             </tfoot>
           </table>
@@ -233,35 +259,43 @@ export default function OrdersOverview({
       {tab === 'detail' && orders.length > 0 && (
         <div className="space-y-1">
           {Object.entries(customerDetail)
-            .sort(([, a], [, b]) => a.name.localeCompare(b.name, 'cs'))
+            .sort(([, a], [, b]) => {
+              if (a.skipped !== b.skipped) return a.skipped ? 1 : -1;
+              return a.name.localeCompare(b.name, 'cs');
+            })
             .map(([userId, c]) => {
               const isOpen = expanded.has(userId);
               const userTotal = c.items.reduce((s, i) => s + i.price, 0);
               const userQty = c.items.reduce((s, i) => s + i.qty, 0);
               return (
-                <div key={userId} className="border border-dough-200 rounded-lg overflow-hidden">
+                <div key={userId} className={`border rounded-lg overflow-hidden ${c.skipped ? 'border-red-200' : 'border-dough-200'}`}>
                   <button
                     onClick={() => toggleExpand(userId)}
-                    className="w-full flex items-center justify-between px-4 py-3 bg-white hover:bg-dough-50 transition-colors text-left"
+                    className={`w-full flex items-center justify-between px-4 py-3 transition-colors text-left ${
+                      c.skipped ? 'bg-red-50 hover:bg-red-100' : 'bg-white hover:bg-dough-50'
+                    }`}
                   >
-                    <span className="font-medium text-gray-800">{c.name}</span>
+                    <span className={`font-medium ${c.skipped ? 'text-red-700' : 'text-gray-800'}`}>
+                      {c.name}
+                      {c.skipped && <span className="ml-2 text-xs font-normal text-red-400">(přeskočeno)</span>}
+                    </span>
                     <span className="flex items-center gap-3 text-sm">
-                      <span className="text-gray-500">{userQty} ks</span>
-                      <span className="text-bread-700 font-semibold">{formatKc(userTotal)}</span>
-                      <span className={`text-gray-400 transition-transform ${isOpen ? 'rotate-90' : ''}`}>
+                      <span className={c.skipped ? 'text-red-400 line-through' : 'text-gray-500'}>{userQty} ks</span>
+                      <span className={c.skipped ? 'text-red-400 line-through' : 'text-bread-700 font-semibold'}>{formatKc(userTotal)}</span>
+                      <span className={`transition-transform ${isOpen ? 'rotate-90' : ''} ${c.skipped ? 'text-red-300' : 'text-gray-400'}`}>
                         ›
                       </span>
                     </span>
                   </button>
                   {isOpen && (
-                    <div className="border-t border-dough-200 bg-dough-50 px-4 py-2">
+                    <div className={`border-t px-4 py-2 ${c.skipped ? 'border-red-200 bg-red-50' : 'border-dough-200 bg-dough-50'}`}>
                       <table className="w-full text-sm">
                         <tbody className="divide-y divide-dough-100">
                           {c.items.map((item) => (
                             <tr key={item.product}>
-                              <td className="py-1.5 text-gray-700">{item.product}</td>
-                              <td className="py-1.5 text-right text-gray-500">× {item.qty}</td>
-                              <td className="py-1.5 text-right text-gray-600 w-20">{formatKc(item.price)}</td>
+                              <td className={`py-1.5 ${c.skipped ? 'text-red-400 line-through' : 'text-gray-700'}`}>{item.product}</td>
+                              <td className={`py-1.5 text-right ${c.skipped ? 'text-red-400 line-through' : 'text-gray-500'}`}>× {item.qty}</td>
+                              <td className={`py-1.5 text-right w-20 ${c.skipped ? 'text-red-400 line-through' : 'text-gray-600'}`}>{formatKc(item.price)}</td>
                             </tr>
                           ))}
                         </tbody>

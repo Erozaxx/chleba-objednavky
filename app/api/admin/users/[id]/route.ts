@@ -2,6 +2,7 @@
  * app/api/admin/users/[id]/route.ts
  *
  * PATCH: update uživatele (jméno, email, phone, active, skipUntil)
+ * DELETE: smazání uživatele (kaskádově smaže objednávky)
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -84,6 +85,26 @@ export async function PATCH(request: NextRequest, { params }: RouteParams): Prom
     });
   } catch (error) {
     console.error('[api/admin/users/[id]] PATCH error:', error);
+    return NextResponse.json({ error: 'Interní chyba serveru.' }, { status: 500 });
+  }
+}
+
+export async function DELETE(_request: NextRequest, { params }: RouteParams): Promise<NextResponse> {
+  try {
+    const { id } = params;
+
+    const [deleted] = await db
+      .delete(users)
+      .where(eq(users.id, id))
+      .returning({ id: users.id });
+
+    if (!deleted) {
+      return NextResponse.json({ error: 'Uživatel nenalezen.' }, { status: 404 });
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('[api/admin/users/[id]] DELETE error:', error);
     return NextResponse.json({ error: 'Interní chyba serveru.' }, { status: 500 });
   }
 }

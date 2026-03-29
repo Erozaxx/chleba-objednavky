@@ -117,6 +117,11 @@ export default async function AdminPage({ params }: AdminPageProps) {
     .filter((r) => r.weekStart === nextWeekStartISO)
     .map(({ weekStart: _w, ...r }) => r);
 
+  // Uživatelé, kteří mají příští týden přeskočen
+  const skippedNextWeekUserIds = allUsers
+    .filter((u) => u.skipUntil !== null && u.skipUntil >= nextWeekStartISO)
+    .map((u) => u.id);
+
   return (
     <main className="min-h-screen bg-dough-100">
       {/* Header */}
@@ -155,6 +160,7 @@ export default async function AdminPage({ params }: AdminPageProps) {
             nextWeekStart={nextWeekStartISO}
             currentWeekOrders={currentWeekOrderRows}
             nextWeekOrders={nextWeekOrderRows}
+            skippedNextWeekUserIds={skippedNextWeekUserIds}
           />
         </section>
 
