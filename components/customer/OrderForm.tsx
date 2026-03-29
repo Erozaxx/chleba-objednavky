@@ -250,9 +250,6 @@ export default function OrderForm({
         <p className="text-bread-600 mt-1">
           {userName}
         </p>
-        <p className="text-sm font-medium text-bread-700 mt-1">
-          Pečení: {bakingDateLabel}
-        </p>
       </div>
 
       {/* Deadline info */}

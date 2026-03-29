@@ -80,7 +80,7 @@ export default async function CustomerPage({ params }: { params: { token: string
   const deadlineInfo = isClosed
     ? 'Tento týden je uzavřen pro objednávky.'
     : editable
-      ? `Objednávky lze měnit do ${formatDateCZ(deadlineDate)} 17:00.`
+      ? `Pečení ${bakingDateLabel} — objednávky do ${formatDateCZ(deadlineDate)} 17:00.`
       : `Uzávěrka proběhla ${formatDateCZ(deadlineDate)} 17:00 – objednávky jsou uzamčeny.`;
 
   // Fetch active products + oneshot products souběžně (Promise.all)
