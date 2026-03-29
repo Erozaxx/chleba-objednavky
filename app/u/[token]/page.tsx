@@ -157,14 +157,22 @@ export default async function CustomerPage({ params }: { params: { token: string
           initialOneshotOrders={initialOneshotOrders}
         />
         {/* Next week skip control */}
-        {(() => {
+        {(async () => {
           const nextWeek = getNextWeekStart(weekStart, 1);
           const nextWeekISO = formatDateISO(nextWeek);
-          const nextWeekLabel = nextWeek.toLocaleDateString('cs-CZ', {
-            day: 'numeric', month: 'long', year: 'numeric',
-          });
           const weekAfterNext = getNextWeekStart(weekStart, 2);
           const weekAfterNextISO = formatDateISO(weekAfterNext);
+          // Fetch next week settings to get bakingDay (may differ from current week)
+          const [nextWs] = await db
+            .select()
+            .from(weekSettings)
+            .where(eq(weekSettings.weekStart, nextWeekISO))
+            .limit(1);
+          const nextBakingDay = nextWs?.bakingDay ?? 5;
+          const nextBakingDate = getBakingDate(nextWeek, nextBakingDay);
+          const nextWeekLabel = nextBakingDate.toLocaleDateString('cs-CZ', {
+            weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+          });
           return (
             <SkipWeekButton
               nextWeekStart={nextWeekISO}

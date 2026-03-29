@@ -20,12 +20,20 @@ interface UserRow {
   createdAt: string;
 }
 
+interface ProductRow {
+  id: string;
+  name: string;
+  sortOrder: number;
+}
+
 interface UserTableProps {
   users: UserRow[];
   adminToken: string;
+  products: ProductRow[];
+  nextWeekStart: string;
 }
 
-export default function UserTable({ users: initialUsers, adminToken }: UserTableProps) {
+export default function UserTable({ users: initialUsers, adminToken, products, nextWeekStart }: UserTableProps) {
   const [users, setUsers] = useState<UserRow[]>(initialUsers);
   const [showAddForm, setShowAddForm] = useState(false);
   const [newName, setNewName] = useState('');
@@ -33,6 +41,11 @@ export default function UserTable({ users: initialUsers, adminToken }: UserTable
   const [newPhone, setNewPhone] = useState('');
   const [feedback, setFeedback] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Onboarding step 2: nastavení pravidelné objednávky
+  const [onboardingUser, setOnboardingUser] = useState<UserRow | null>(null);
+  const [orderDrafts, setOrderDrafts] = useState<Record<string, number>>({});
+  const [orderSaving, setOrderSaving] = useState(false);
 
   const apiHeaders = {
     'Content-Type': 'application/json',
@@ -130,7 +143,9 @@ export default function UserTable({ users: initialUsers, adminToken }: UserTable
         setNewEmail('');
         setNewPhone('');
         setShowAddForm(false);
-        setFeedback('Zákazník vytvořen.');
+        // Přejít na krok 2: nastavení pravidelné objednávky
+        setOnboardingUser(data.user);
+        setOrderDrafts({});
       } else {
         setFeedback(data.error || 'Chyba při vytváření zákazníka.');
       }
@@ -138,6 +153,37 @@ export default function UserTable({ users: initialUsers, adminToken }: UserTable
       setFeedback('Chyba spojení.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSaveOrder = async () => {
+    if (!onboardingUser) return;
+    const items = Object.entries(orderDrafts)
+      .filter(([, qty]) => qty > 0)
+      .map(([productId, quantity]) => ({ productId, quantity }));
+    if (items.length === 0) {
+      setOnboardingUser(null);
+      setFeedback('Zákazník vytvořen (bez objednávky).');
+      return;
+    }
+    setOrderSaving(true);
+    try {
+      const res = await fetch(`/api/admin/users/${onboardingUser.id}/orders`, {
+        method: 'POST',
+        headers: apiHeaders,
+        body: JSON.stringify({ weekStart: nextWeekStart, orders: items }),
+      });
+      if (res.ok) {
+        setOnboardingUser(null);
+        setFeedback('Zákazník vytvořen a objednávka nastavena.');
+      } else {
+        const data = await res.json();
+        setFeedback(data.error || 'Chyba při ukládání objednávky.');
+      }
+    } catch {
+      setFeedback('Chyba spojení.');
+    } finally {
+      setOrderSaving(false);
     }
   };
 
@@ -279,6 +325,57 @@ export default function UserTable({ users: initialUsers, adminToken }: UserTable
 
       {users.length === 0 && (
         <p className="text-center text-gray-500 py-8">Zatím žádní zákazníci.</p>
+      )}
+
+      {/* Onboarding krok 2: nastavení pravidelné objednávky */}
+      {onboardingUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6 space-y-4">
+            <h3 className="font-bold text-bread-800 text-lg">
+              Nastavit pravidelnou objednávku
+            </h3>
+            <p className="text-sm text-gray-600">
+              Pro <strong>{onboardingUser.name}</strong>, platí od týdne {nextWeekStart}.
+            </p>
+
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {products.map((p) => (
+                <div key={p.id} className="flex items-center justify-between gap-3">
+                  <span className="text-sm text-gray-800">{p.name}</span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setOrderDrafts(prev => ({ ...prev, [p.id]: Math.max(0, (prev[p.id] ?? 0) - 1) }))}
+                      className="w-7 h-7 rounded border border-dough-200 text-bread-700 hover:bg-dough-100 flex items-center justify-center text-lg leading-none"
+                    >−</button>
+                    <span className="w-6 text-center text-sm font-medium">{orderDrafts[p.id] ?? 0}</span>
+                    <button
+                      type="button"
+                      onClick={() => setOrderDrafts(prev => ({ ...prev, [p.id]: (prev[p.id] ?? 0) + 1 }))}
+                      className="w-7 h-7 rounded border border-dough-200 text-bread-700 hover:bg-dough-100 flex items-center justify-center text-lg leading-none"
+                    >+</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex gap-3 pt-1">
+              <button
+                onClick={() => { setOnboardingUser(null); setFeedback('Zákazník vytvořen (bez objednávky).'); }}
+                className="btn-secondary flex-1"
+              >
+                Přeskočit
+              </button>
+              <button
+                onClick={handleSaveOrder}
+                disabled={orderSaving}
+                className="btn-primary flex-1"
+              >
+                {orderSaving ? 'Ukládám...' : 'Uložit objednávku'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

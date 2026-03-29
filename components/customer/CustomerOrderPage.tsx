@@ -73,6 +73,8 @@ export default function CustomerOrderPage({
         isEditable={isEditable}
         onOneshotTotalChange={setOneshotTotal}
       />
+
+      <OrderSummary total={totalValue} />
     </div>
   );
 }
