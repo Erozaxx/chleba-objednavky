@@ -197,6 +197,15 @@ export default async function AdminPage({ params }: AdminPageProps) {
               sortOrder: p.sortOrder,
             }))}
             nextWeekStart={onboardingWeekStart}
+            existingOrdersByUser={
+              regularOrderRows
+                .filter((r) => r.weekStart === onboardingWeekStart)
+                .reduce<Record<string, Record<string, number>>>((acc, r) => {
+                  if (!acc[r.userId]) acc[r.userId] = {};
+                  acc[r.userId][r.productId] = r.quantity;
+                  return acc;
+                }, {})
+            }
           />
         </section>
 

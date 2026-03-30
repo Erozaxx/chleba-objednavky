@@ -31,9 +31,11 @@ interface UserTableProps {
   adminToken: string;
   products: ProductRow[];
   nextWeekStart: string;
+  /** Stávající objednávky pro onboardingWeekStart: userId → productId → quantity */
+  existingOrdersByUser: Record<string, Record<string, number>>;
 }
 
-export default function UserTable({ users: initialUsers, adminToken, products, nextWeekStart }: UserTableProps) {
+export default function UserTable({ users: initialUsers, adminToken, products, nextWeekStart, existingOrdersByUser }: UserTableProps) {
   const [users, setUsers] = useState<UserRow[]>(initialUsers);
   const [showAddForm, setShowAddForm] = useState(false);
   const [newName, setNewName] = useState('');
@@ -143,7 +145,7 @@ export default function UserTable({ users: initialUsers, adminToken, products, n
         setNewEmail('');
         setNewPhone('');
         setShowAddForm(false);
-        // Přejít na krok 2: nastavení pravidelné objednávky
+        // Přejít na krok 2: nastavení pravidelné objednávky (nový zákazník – žádné stávající objednávky)
         setOnboardingUser(data.user);
         setOrderDrafts({});
       } else {
@@ -177,10 +179,10 @@ export default function UserTable({ users: initialUsers, adminToken, products, n
 
   const handleSaveOrder = async () => {
     if (!onboardingUser) return;
-    const items = Object.entries(orderDrafts)
-      .filter(([, qty]) => qty > 0)
-      .map(([productId, quantity]) => ({ productId, quantity }));
-    if (items.length === 0) {
+    // Posíláme všechny produkty včetně nul – API smaže záznamy s qty=0
+    const items = products.map((p) => ({ productId: p.id, quantity: orderDrafts[p.id] ?? 0 }));
+    const hasAny = items.some((i) => i.quantity > 0);
+    if (!hasAny && !existingOrdersByUser[onboardingUser.id]) {
       setOnboardingUser(null);
       setFeedback('Zákazník vytvořen (bez objednávky).');
       return;
@@ -194,7 +196,7 @@ export default function UserTable({ users: initialUsers, adminToken, products, n
       });
       if (res.ok) {
         setOnboardingUser(null);
-        setFeedback('Zákazník vytvořen a objednávka nastavena.');
+        setFeedback('Objednávka uložena.');
       } else {
         const data = await res.json();
         setFeedback(data.error || 'Chyba při ukládání objednávky.');
@@ -310,7 +312,7 @@ export default function UserTable({ users: initialUsers, adminToken, products, n
                       URL
                     </button>
                     <button
-                      onClick={() => { setOnboardingUser(user); setOrderDrafts({}); }}
+                      onClick={() => { setOnboardingUser(user); setOrderDrafts(existingOrdersByUser[user.id] ?? {}); }}
                       className="px-2 py-1 text-xs bg-green-100 hover:bg-green-200 text-green-700 rounded transition-colors"
                       title="Nastavit pravidelnou objednávku"
                     >
