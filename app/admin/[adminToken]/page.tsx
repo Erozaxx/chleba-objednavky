@@ -10,7 +10,7 @@ import { redirect } from 'next/navigation';
 import { db } from '@/lib/db/client';
 import { users, products, weekSettings, orders, oneshotOrders } from '@/lib/db/schema';
 import { eq, desc, asc, and, gte, inArray, sql } from 'drizzle-orm';
-import { getWeekStart, getNextWeekStart, formatDateISO } from '@/lib/week/utils';
+import { getWeekStart, getNextWeekStart, formatDateISO, isBeforeCutoff } from '@/lib/week/utils';
 import UserTable from '@/components/admin/UserTable';
 import ProductTable from '@/components/admin/ProductTable';
 import WeekSettingsTable from '@/components/admin/WeekSettingsTable';
@@ -58,6 +58,14 @@ export default async function AdminPage({ params }: AdminPageProps) {
   const weekStartISO = formatDateISO(weekStart);
   const nextWeekStart = getNextWeekStart(weekStart, 1);
   const nextWeekStartISO = formatDateISO(nextWeekStart);
+
+  // Effective ordering week for onboarding: matches what customer currently sees.
+  // After deadline (day before baking at 17:00) customers already see next week.
+  const currentWs = allWeeks.find((w) => w.weekStart === weekStartISO);
+  const currentBakingDay = currentWs?.bakingDay ?? 5;
+  const now = new Date();
+  const deadlinePassed = !isBeforeCutoff(weekStart, currentBakingDay, 17, now);
+  const onboardingWeekStart = deadlinePassed ? nextWeekStartISO : weekStartISO;
 
   // Orders count for stats card (current week)
   const currentWeekOrdersCount = await db
@@ -188,7 +196,7 @@ export default async function AdminPage({ params }: AdminPageProps) {
               name: p.name,
               sortOrder: p.sortOrder,
             }))}
-            nextWeekStart={nextWeekStartISO}
+            nextWeekStart={onboardingWeekStart}
           />
         </section>
 

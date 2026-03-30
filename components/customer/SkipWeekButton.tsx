@@ -120,7 +120,7 @@ export default function SkipWeekButton({
             disabled={loading}
             className="flex-1 py-2 text-sm rounded-lg border border-bread-300 text-bread-700 hover:bg-amber-50 hover:border-amber-300 transition-colors disabled:opacity-50"
           >
-            {loading ? 'Zpracovávám...' : 'Přeskočit 1 týden'}
+            {loading ? 'Zpracovávám...' : 'Přeskočit 1 termín pečení'}
           </button>
           <button
             type="button"
@@ -128,7 +128,7 @@ export default function SkipWeekButton({
             disabled={loading}
             className="flex-1 py-2 text-sm rounded-lg border border-bread-300 text-bread-700 hover:bg-amber-50 hover:border-amber-300 transition-colors disabled:opacity-50"
           >
-            {loading ? 'Zpracovávám...' : 'Přeskočit 2 týdny'}
+            {loading ? 'Zpracovávám...' : 'Přeskočit 2 termíny pečení'}
           </button>
         </div>
       )}
@@ -136,7 +136,7 @@ export default function SkipWeekButton({
       {skipWeeks === 1 && (
         <div className="space-y-2">
           <p className="text-sm text-amber-700 bg-amber-50 px-3 py-2 rounded-lg">
-            Příští týden máte přeskočen – nepočítáme s vámi.
+            Příští termín pečení máte přeskočen – nepočítáme s vámi.
           </p>
           <div className="flex flex-col sm:flex-row gap-2">
             <button
@@ -153,7 +153,7 @@ export default function SkipWeekButton({
               disabled={loading}
               className="flex-1 py-2 text-sm rounded-lg border border-bread-300 text-bread-700 hover:bg-amber-50 hover:border-amber-300 transition-colors disabled:opacity-50"
             >
-              {loading ? 'Zpracovávám...' : 'Přeskočit 2 týdny'}
+              {loading ? 'Zpracovávám...' : 'Přeskočit 2 termíny pečení'}
             </button>
           </div>
         </div>
@@ -162,7 +162,7 @@ export default function SkipWeekButton({
       {skipWeeks === 2 && (
         <div className="space-y-2">
           <p className="text-sm text-amber-700 bg-amber-50 px-3 py-2 rounded-lg">
-            Příští 2 týdny máte přeskočeny – nepočítáme s vámi.
+            Příští 2 termíny pečení máte přeskočeny – nepočítáme s vámi.
           </p>
           <button
             type="button"
