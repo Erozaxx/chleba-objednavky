@@ -310,6 +310,13 @@ export default function UserTable({ users: initialUsers, adminToken, products, n
                       URL
                     </button>
                     <button
+                      onClick={() => { setOnboardingUser(user); setOrderDrafts({}); }}
+                      className="px-2 py-1 text-xs bg-green-100 hover:bg-green-200 text-green-700 rounded transition-colors"
+                      title="Nastavit pravidelnou objednávku"
+                    >
+                      Objednávka
+                    </button>
+                    <button
                       onClick={() => handleSendOnboarding(user.id)}
                       disabled={!user.email}
                       className="px-2 py-1 text-xs bg-bread-100 hover:bg-bread-200 rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
