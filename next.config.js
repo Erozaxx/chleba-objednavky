@@ -49,12 +49,24 @@ const securityHeaders = [
   },
 ];
 
+const appOrigin = process.env.NEXT_PUBLIC_APP_URL || 'https://chleba-objednavky.vercel.app';
+
 const nextConfig = {
   async headers() {
     return [
       {
         source: '/(.*)',
         headers: securityHeaders,
+      },
+      // API routes: explicitně blokovat cross-origin volání z jiných domén.
+      // Naše API používá token auth (ne cookies), ale lépe být explicitní.
+      {
+        source: '/api/(.*)',
+        headers: [
+          { key: 'Access-Control-Allow-Origin', value: appOrigin },
+          { key: 'Access-Control-Allow-Methods', value: 'GET, POST, PATCH, DELETE, OPTIONS' },
+          { key: 'Access-Control-Allow-Headers', value: 'Content-Type, x-customer-token, x-admin-token' },
+        ],
       },
     ];
   },
